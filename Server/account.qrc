@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/account">
+        <file>account/account.json</file>
+    </qresource>
+</RCC>

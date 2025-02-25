@@ -1,0 +1,69 @@
+{
+    "users": [
+        {
+            "status": "online",
+            "time": "16:54:14",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "16:54:29",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "17:23:20",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "17:23:43",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "18:12:46",
+            "username": "bob"
+        },
+        {
+            "status": "online",
+            "time": "23:37:30",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "23:40:36",
+            "username": "July"
+        },
+        {
+            "status": "online",
+            "time": "23:43:18",
+            "username": "June"
+        },
+        {
+            "status": "online",
+            "time": "23:49:22",
+            "username": "bob"
+        },
+        {
+            "status": "online",
+            "time": "23:51:32",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "23:53:25",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "23:56:17",
+            "username": "bob"
+        },
+        {
+            "status": "online",
+            "time": "23:57:39",
+            "username": "alex"
+        }
+    ]
+}

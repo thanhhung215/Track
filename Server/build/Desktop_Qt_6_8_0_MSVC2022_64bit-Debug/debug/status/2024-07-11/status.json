@@ -1,0 +1,294 @@
+{
+    "users": [
+        {
+            "status": "online",
+            "time": "09:23:25",
+            "username": "June"
+        },
+        {
+            "status": "offline",
+            "time": "09:23:38",
+            "username": "June"
+        },
+        {
+            "status": "online",
+            "time": "09:43:20",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "09:52:57",
+            "username": "July"
+        },
+        {
+            "status": "online",
+            "time": "10:48:54",
+            "username": "alex"
+        },
+        {
+            "status": "offline",
+            "time": "10:49:07",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "10:53:34",
+            "username": "bob"
+        },
+        {
+            "status": "online",
+            "time": "11:16:49",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "12:14:42",
+            "username": "July"
+        },
+        {
+            "status": "offline",
+            "time": "12:15:07",
+            "username": "July"
+        },
+        {
+            "status": "online",
+            "time": "12:15:51",
+            "username": "July"
+        },
+        {
+            "status": "offline",
+            "time": "12:16:56",
+            "username": "July"
+        },
+        {
+            "status": "online",
+            "time": "12:17:16",
+            "username": "alex"
+        },
+        {
+            "status": "offline",
+            "time": "12:17:23",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "12:17:36",
+            "username": "alex"
+        },
+        {
+            "status": "offline",
+            "time": "12:18:35",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "13:16:14",
+            "username": "July"
+        },
+        {
+            "status": "offline",
+            "time": "13:20:16",
+            "username": "July"
+        },
+        {
+            "status": "online",
+            "time": "13:28:43",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "13:29:41",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:29:55",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "13:30:25",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:30:35",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "13:31:00",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:31:20",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "13:32:15",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:32:24",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "13:32:40",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:34:47",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "13:35:39",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:35:49",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:38:48",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:41:17",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:48:18",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:51:38",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "13:55:14",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "14:00:18",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "14:04:12",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "14:43:45",
+            "username": "alex"
+        },
+        {
+            "status": "offline",
+            "time": "14:44:27",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "14:45:01",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "14:47:36",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "15:23:32",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "15:41:34",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "15:44:09",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "15:53:20",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "16:12:21",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "16:16:37",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "16:18:22",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "16:27:52",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "16:33:16",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "16:39:14",
+            "username": "alex"
+        },
+        {
+            "status": "offline",
+            "time": "16:41:07",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "16:41:22",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "17:03:06",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "17:06:49",
+            "username": "bob"
+        },
+        {
+            "status": "online",
+            "time": "17:21:44",
+            "username": "June"
+        },
+        {
+            "status": "online",
+            "time": "17:32:07",
+            "username": "July"
+        }
+    ]
+}

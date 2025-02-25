@@ -1,0 +1,114 @@
+{
+    "users": [
+        {
+            "status": "online",
+            "time": "09:22:24",
+            "username": "alex"
+        },
+        {
+            "status": "offline",
+            "time": "09:30:55",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "09:31:34",
+            "username": "July"
+        },
+        {
+            "status": "offline",
+            "time": "09:50:11",
+            "username": "July"
+        },
+        {
+            "status": "online",
+            "time": "09:50:53",
+            "username": "June"
+        },
+        {
+            "status": "offline",
+            "time": "09:53:40",
+            "username": "June"
+        },
+        {
+            "status": "online",
+            "time": "09:54:02",
+            "username": "July"
+        },
+        {
+            "status": "offline",
+            "time": "09:55:52",
+            "username": "July"
+        },
+        {
+            "status": "online",
+            "time": "09:56:38",
+            "username": "July"
+        },
+        {
+            "status": "offline",
+            "time": "10:01:58",
+            "username": "July"
+        },
+        {
+            "status": "online",
+            "time": "10:56:34",
+            "username": "john"
+        },
+        {
+            "status": "offline",
+            "time": "10:59:13",
+            "username": "john"
+        },
+        {
+            "status": "online",
+            "time": "15:59:05",
+            "username": "ana"
+        },
+        {
+            "status": "offline",
+            "time": "15:59:31",
+            "username": "ana"
+        },
+        {
+            "status": "online",
+            "time": "15:59:47",
+            "username": "ana"
+        },
+        {
+            "status": "offline",
+            "time": "16:00:01",
+            "username": "ana"
+        },
+        {
+            "status": "online",
+            "time": "16:00:14",
+            "username": "ana"
+        },
+        {
+            "status": "offline",
+            "time": "16:00:33",
+            "username": "ana"
+        },
+        {
+            "status": "online",
+            "time": "16:16:15",
+            "username": "alex"
+        },
+        {
+            "status": "offline",
+            "time": "16:18:02",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "16:25:05",
+            "username": "alex"
+        },
+        {
+            "status": "offline",
+            "time": "16:28:55",
+            "username": "alex"
+        }
+    ]
+}

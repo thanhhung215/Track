@@ -1,0 +1,14 @@
+{
+    "users": [
+        {
+            "status": "online",
+            "time": "12:02:17",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "12:02:28",
+            "username": "vy"
+        }
+    ]
+}

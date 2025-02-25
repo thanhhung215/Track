@@ -1,0 +1,71 @@
+{
+    "users": [
+        {
+            "info": {
+                "Birthday": "21/02/1956",
+                "Email": "alexF@gmail.com",
+                "Fullname": "Alex Ferguson",
+                "Sex": "Male",
+                "Tel": "0837728492"
+            },
+            "password": "ad",
+            "username": "alex"
+        },
+        {
+            "info": {
+                "Birthday": "22/12/1960",
+                "Email": "1",
+                "Fullname": "Bobby Charton",
+                "Sex": "Male",
+                "Tel": "0382284923"
+            },
+            "password": "admin",
+            "username": "bob"
+        },
+        {
+            "info": {
+                "Birthday": "5",
+                "Email": "5",
+                "Fullname": "5",
+                "Sex": "5",
+                "Tel": "5"
+            },
+            "password": "min",
+            "username": "July"
+        },
+        {
+            "info": {
+                "Birthday": "9",
+                "Email": "9",
+                "Fullname": "9",
+                "Sex": "9",
+                "Tel": "9"
+            },
+            "password": "adm",
+            "username": "June"
+        },
+        {
+            "info": {
+                "Birthday": "20/04/1994",
+                "Email": "vythaonguyen204@gmail.com",
+                "Fullname": "Vy Vy Nguyen",
+                "Sex": "Female",
+                "Tel": "0919838358"
+            },
+            "password": "vyvy",
+            "username": "vy"
+        },
+        {
+            "password": "123321",
+            "username": "john"
+        },
+        {
+            "password": "123321",
+            "username": "andrew"
+        },
+        {
+            "password": "admin",
+            "username": "ana"
+        }
+    ]
+}

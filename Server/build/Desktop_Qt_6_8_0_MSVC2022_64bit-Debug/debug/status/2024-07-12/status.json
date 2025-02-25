@@ -1,0 +1,94 @@
+{
+    "users": [
+        {
+            "status": "online",
+            "time": "14:16:51",
+            "username": "alex"
+        },
+        {
+            "status": "offline",
+            "time": "14:17:28",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "14:18:37",
+            "username": "alex"
+        },
+        {
+            "status": "offline",
+            "time": "14:18:56",
+            "username": "alex"
+        },
+        {
+            "status": "online",
+            "time": "14:26:58",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "14:28:42",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "14:29:24",
+            "username": "July"
+        },
+        {
+            "status": "offline",
+            "time": "14:29:43",
+            "username": "July"
+        },
+        {
+            "status": "online",
+            "time": "14:47:21",
+            "username": "June"
+        },
+        {
+            "status": "offline",
+            "time": "14:47:57",
+            "username": "June"
+        },
+        {
+            "status": "online",
+            "time": "14:59:09",
+            "username": "July"
+        },
+        {
+            "status": "offline",
+            "time": "15:00:29",
+            "username": "July"
+        },
+        {
+            "status": "online",
+            "time": "15:21:23",
+            "username": "vy"
+        },
+        {
+            "status": "offline",
+            "time": "15:21:51",
+            "username": "vy"
+        },
+        {
+            "status": "online",
+            "time": "17:25:20",
+            "username": "June"
+        },
+        {
+            "status": "offline",
+            "time": "17:28:21",
+            "username": "June"
+        },
+        {
+            "status": "online",
+            "time": "17:33:50",
+            "username": "bob"
+        },
+        {
+            "status": "offline",
+            "time": "17:34:06",
+            "username": "bob"
+        }
+    ]
+}
