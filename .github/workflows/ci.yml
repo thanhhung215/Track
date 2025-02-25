@@ -20,7 +20,7 @@ jobs:
         host: 'windows'
         target: 'desktop'
         arch: 'win64_msvc2022_64'
-        modules: 'qtnetwork qtmultimedia qtmultimediawidgets qthttpserver'
+        modules: 'qt5compat qtmultimedia  qthttpserver'
         
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
