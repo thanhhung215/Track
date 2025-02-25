@@ -1,0 +1,71 @@
+name: Qt CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v3
+      with:
+        version: '6.8.0'
+        host: 'windows'
+        target: 'desktop'
+        arch: 'win64_msvc2022_64'
+        modules: 'qtnetwork qtmultimedia qtmultimediawidgets qthttpserver'
+        
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+        
+    - name: Build Server
+      run: |
+        cd Server
+        qmake
+        nmake
+        
+    - name: Build Client
+      run: |
+        cd Client
+        qmake
+        nmake
+        
+    - name: Create Release Directory
+      run: mkdir release
+      
+    - name: Copy Executables
+      run: |
+        copy Server\build\Desktop_Qt_6_8_0_MSVC2022_64bit-Debug\Server.exe release\
+        copy Client\build\Desktop_Qt_6_8_0_MSVC2022_64bit-Debug\Client.exe release\
+        
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: qt-executables
+        path: release\
+
+    - name: Run Tests
+      run: |
+        cd Server/tests
+        qmake
+        nmake
+        ./tests
+        
+        cd ../../Client/tests
+        qmake
+        nmake
+        ./tests
+
+    - name: Deploy to Server
+      if: github.ref == 'refs/heads/main'
+      run: |
+        # Các lệnh triển khai của bạn 
