@@ -31,13 +31,13 @@ jobs:
       run: |
         cd Server
         qmake
-        nmake
+        nmake release
         
     - name: Build Client
       run: |
         cd Client
         qmake
-        nmake
+        nmake release
         
     - name: Create Release Directory
       run: mkdir release

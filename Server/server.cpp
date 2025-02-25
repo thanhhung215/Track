@@ -114,7 +114,7 @@ void server::setupHttpServer() {
     });
 
     // Start listening on port 8080
-    if (!httpServer->bind(QHostAddress::Any, 8080)) {
+    if (!httpServer->listen(QHostAddress::Any, 8080)) {
         qDebug() << "Failed to start HTTP server";
     } else {
         qDebug() << "HTTP server started on port 8080";
