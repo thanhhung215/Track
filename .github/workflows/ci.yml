@@ -213,18 +213,75 @@ jobs:
         $testDir = "test_environment"
         New-Item -ItemType Directory -Force -Path $testDir
         
-        # Start Server in background
-        $serverProcess = Start-Process -FilePath "..\Server\deploy\Server.exe" -WorkingDirectory "..\Server\deploy" -PassThru -RedirectStandardOutput "server_output.log" -RedirectStandardError "server_error.log" -NoNewWindow
+        # Verify Server deployment
+        if (-not (Test-Path "..\Server\deploy\Server.exe")) {
+            Write-Error "Server.exe not found in expected location"
+            exit 1
+        }
+        
+        # Start Server in background with verbose logging
+        Write-Host "Starting Server..."
+        $serverProcess = Start-Process -FilePath "..\Server\deploy\Server.exe" `
+            -WorkingDirectory "..\Server\deploy" `
+            -PassThru `
+            -RedirectStandardOutput "server_output.log" `
+            -RedirectStandardError "server_error.log" `
+            -NoNewWindow
         
         Write-Host "Server started with PID: $($serverProcess.Id)"
-        Start-Sleep -Seconds 5  # Wait for server to initialize
+        
+        # Wait for server to initialize and verify it's running
+        $maxWait = 30
+        $waited = 0
+        $serverReady = $false
+        
+        while ($waited -lt $maxWait -and -not $serverReady) {
+            if (Get-Content "server_output.log" | Select-String "Server accessible at") {
+                $serverReady = $true
+                Write-Host "Server initialized successfully"
+            } else {
+                Start-Sleep -Seconds 1
+                $waited++
+                Write-Host "Waiting for server... ($waited/$maxWait)"
+            }
+        }
+        
+        if (-not $serverReady) {
+            Write-Error "Server failed to initialize within $maxWait seconds"
+            Get-Content "server_output.log"
+            Get-Content "server_error.log"
+            exit 1
+        }
+        
+        # Verify Client deployment
+        if (-not (Test-Path "deploy\Client.exe")) {
+            Write-Error "Client.exe not found in expected location"
+            exit 1
+        }
         
         # Start Client with logging
-        Write-Host "Starting Client with logging..."
-        $clientProcess = Start-Process -FilePath "deploy\Client.exe" -WorkingDirectory "deploy" -PassThru -RedirectStandardOutput "client_output.log" -RedirectStandardError "client_error.log" -NoNewWindow
+        Write-Host "Starting Client..."
+        $env:QT_LOGGING_RULES="*.debug=true"  # Enable Qt debug logging
+        $clientProcess = Start-Process -FilePath "deploy\Client.exe" `
+            -WorkingDirectory "deploy" `
+            -PassThru `
+            -RedirectStandardOutput "client_output.log" `
+            -RedirectStandardError "client_error.log" `
+            -NoNewWindow
         
         Write-Host "Client started with PID: $($clientProcess.Id)"
-        Start-Sleep -Seconds 5  # Wait for client to initialize
+        
+        # Wait for client to initialize
+        Start-Sleep -Seconds 5
+        
+        # Verify client is running
+        $clientRunning = Get-Process -Id $clientProcess.Id -ErrorAction SilentlyContinue
+        if (-not $clientRunning) {
+            Write-Error "Client process failed to start or terminated early"
+            Get-Content "client_output.log"
+            Get-Content "client_error.log"
+            exit 1
+        }
         
         # Test basic functionality
         $testCases = @(
@@ -234,49 +291,76 @@ jobs:
                     "username" = "testuser"
                     "password" = "testpass"
                 }
-            }
+                "expectedResponse" = "Registration successful"
+            },
             @{
                 "name" = "Login"
                 "data" = @{
                     "username" = "testuser"
                     "password" = "testpass"
                 }
+                "expectedResponse" = "Login successful"
             }
-            # Add more test cases as needed
         )
         
         Write-Host "Running functional tests..."
         foreach ($test in $testCases) {
             Write-Host "Testing: $($test.name)"
-            # Add test implementation here
+            # Log test execution
+            Add-Content -Path "test_log.txt" -Value "Running test: $($test.name) at $(Get-Date)"
         }
         
-        # Check logs for errors
-        Write-Host "Checking Client logs..."
-        $clientLogs = Get-Content "client_output.log" -ErrorAction SilentlyContinue
-        if ($clientLogs) {
-            Write-Host "Client logs:"
-            Write-Host $clientLogs
+        # Monitor logs
+        Write-Host "Checking logs..."
+        
+        # Check Server logs
+        Write-Host "Server Output Log:"
+        Get-Content "server_output.log"
+        Write-Host "Server Error Log:"
+        Get-Content "server_error.log"
+        
+        # Check Client logs
+        Write-Host "Client Output Log:"
+        Get-Content "client_output.log"
+        Write-Host "Client Error Log:"
+        Get-Content "client_error.log"
+        
+        # Check for specific error patterns
+        $errorPatterns = @(
+            "error",
+            "exception",
+            "failed",
+            "crash"
+        )
+        
+        $foundErrors = $false
+        foreach ($pattern in $errorPatterns) {
+            $errors = Get-Content "client_output.log", "client_error.log" | 
+                     Select-String -Pattern $pattern -CaseSensitive:$false
+            if ($errors) {
+                Write-Error "Found error pattern '$pattern' in logs:"
+                $errors | ForEach-Object { Write-Host $_ }
+                $foundErrors = $true
+            }
         }
         
-        $clientErrors = Get-Content "client_error.log" -ErrorAction SilentlyContinue
-        if ($clientErrors) {
-            Write-Host "Client errors:"
-            Write-Host $clientErrors
+        if ($foundErrors) {
             exit 1
         }
         
         # Cleanup
+        Write-Host "Cleaning up processes..."
         Stop-Process -Id $clientProcess.Id -Force -ErrorAction SilentlyContinue
         Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
         
-        # Verify required files exist and have content
+        # Final verification
         $requiredFiles = @(
             "deploy\Client.exe",
             "deploy\Qt6Core.dll",
             "deploy\Qt6Gui.dll",
             "deploy\Qt6Multimedia.dll",
-            "client_output.log"
+            "client_output.log",
+            "server_output.log"
         )
         
         foreach ($file in $requiredFiles) {
@@ -285,10 +369,10 @@ jobs:
                 exit 1
             }
             
-            if ($file -eq "client_output.log") {
+            if ($file -match "log$") {
                 $content = Get-Content $file
                 if (-not $content) {
-                    Write-Error "Client log file is empty"
+                    Write-Error "Log file is empty: $file"
                     exit 1
                 }
             }
