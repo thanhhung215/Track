@@ -1,10 +1,10 @@
-name: Qt CI
+name: Build Qt Application
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [ main ]
 
 jobs:
   build:
@@ -12,60 +12,43 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
         version: '6.8.0'
         host: 'windows'
         target: 'desktop'
-        arch: 'win64_msvc2022_64'
-        modules: 'qt5compat qtmultimedia  qthttpserver qtwebsockets'
-        
-    - name: Setup MSVC
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
-        
-    - name: Build Server
-      run: |
-        cd Server
-        qmake
-        nmake release
-        
-    - name: Build Client
-      run: |
-        cd Client
-        qmake
-        nmake release
-        
-    - name: Create Release Directory
-      run: mkdir release
-      
-    - name: Copy Executables
-      run: |
-        copy Server\build\Desktop_Qt_6_8_0_MSVC2022_64bit-Debug\Server.exe release\
-        copy Client\build\Desktop_Qt_6_8_0_MSVC2022_64bit-Debug\Client.exe release\
-        
-    - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: qt-executables
-        path: release\
+        arch: 'win64_msvc2019_64'
+        tools: 'tools_qtcreator'
+        cache: true
 
-    - name: Run Tests
-      run: |
-        cd Server/tests
-        qmake
-        nmake
-        ./tests
-        
-        cd ../../Client/tests
-        qmake
-        nmake
-        ./tests
+    - name: Set up MSVC
+      uses: microsoft/setup-msbuild@v1.1
 
-    - name: Deploy to Server
-      if: github.ref == 'refs/heads/main'
+    - name: Create Build Directory
+      run: mkdir build
+      working-directory: Server
+
+    - name: Configure QMake
       run: |
-        # Các lệnh triển khai của bạn 
+        qmake ..\Server.pro -spec win32-msvc
+      working-directory: Server/build
+
+    - name: Build
+      run: |
+        nmake
+      working-directory: Server/build
+
+    - name: Deploy
+      run: |
+        mkdir deploy
+        copy build\release\Server.exe deploy\
+        windeployqt deploy\Server.exe
+      working-directory: Server
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: Server-Windows
+        path: Server/deploy/ 
