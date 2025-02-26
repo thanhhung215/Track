@@ -3,6 +3,8 @@ name: Build Qt Application
 on:
   push:
     branches: [ main ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main ]
 
@@ -41,7 +43,7 @@ jobs:
 
     - name: Configure Server QMake
       run: |
-        qmake ..\Server.pro -spec win32-msvc
+        qmake ..\Server.pro -spec win32-msvc "CONFIG+=test"
       working-directory: Server/build
 
     - name: Build Server
@@ -57,6 +59,30 @@ jobs:
         windeployqt deploy\Server.exe
       working-directory: Server
 
+    # Test Server
+    - name: Test Server
+      run: |
+        Start-Process -FilePath "deploy\Server.exe" -WorkingDirectory "deploy"
+        Start-Sleep -Seconds 5  # Wait for server to start
+        
+        # Test HTTP Server
+        try {
+            $response = Invoke-WebRequest -Uri "http://localhost:8080" -TimeoutSec 10
+            if ($response.StatusCode -ne 200) { 
+                Write-Error "HTTP test failed: Status code $($response.StatusCode)"
+                exit 1 
+            }
+            Write-Host "HTTP test passed"
+        }
+        catch {
+            Write-Error "HTTP test failed: $_"
+            exit 1
+        }
+        
+        # Kill Server process
+        Stop-Process -Name "Server" -Force -ErrorAction SilentlyContinue
+      working-directory: Server
+
     # Build Client
     - name: Create Client Build Directory
       run: |
@@ -66,7 +92,7 @@ jobs:
 
     - name: Configure Client QMake
       run: |
-        qmake ..\Client.pro -spec win32-msvc
+        qmake ..\Client.pro -spec win32-msvc "CONFIG+=test"
       working-directory: Client/build
 
     - name: Build Client
@@ -82,15 +108,96 @@ jobs:
         windeployqt deploy\Client.exe
       working-directory: Client
 
-    # Upload artifacts
-    - name: Upload Server artifacts
-      uses: actions/upload-artifact@v4
-      with:
-        name: Server-Windows
-        path: Server/deploy/
+    # Test Client
+    - name: Test Client
+      run: |
+        # Verify required files exist
+        $requiredFiles = @(
+            "deploy\Client.exe",
+            "deploy\Qt6Core.dll",
+            "deploy\Qt6Gui.dll",
+            "deploy\Qt6Multimedia.dll"
+        )
+        
+        foreach ($file in $requiredFiles) {
+            if (-not (Test-Path $file)) {
+                Write-Error "Missing required file: $file"
+                exit 1
+            }
+        }
+        
+        Write-Host "All required files present"
+      working-directory: Client
 
-    - name: Upload Client artifacts
+    # Create combined deployment directory
+    - name: Create Combined Deploy Directory
+      run: |
+        if (Test-Path deploy) { Remove-Item deploy -Recurse -Force }
+        mkdir deploy
+        mkdir deploy\Server
+        mkdir deploy\Client
+        Copy-Item Server\deploy\* deploy\Server\ -Recurse
+        Copy-Item Client\deploy\* deploy\Client\ -Recurse
+        
+        # Create README.txt
+        @"
+        Track Application
+        =================
+
+        Installation:
+        1. Extract all files
+        2. Run Server\Server.exe first
+        3. Run Client\Client.exe
+
+        System Requirements:
+        - Windows 10 or later
+        - At least 4GB RAM
+        - DirectX 11 or later
+        "@ | Out-File -FilePath deploy\README.txt -Encoding UTF8
+
+    # Upload combined artifact
+    - name: Upload Combined Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: Client-Windows
-        path: Client/deploy/
+        name: Track-Windows
+        path: deploy/
+
+    # Create Release
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: deploy/**/*
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## What's Changed
+          * Automated release from tag ${{ github.ref_name }}
+          
+          ## Installation
+          1. Download and extract the archive
+          2. Run Server\Server.exe first
+          3. Run Client\Client.exe
+          
+          ## System Requirements
+          * Windows 10 or later
+          * At least 4GB RAM
+          * DirectX 11 or later
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Notify on Discord
+    - name: Discord Notification
+      if: always()
+      uses: sarisia/actions-status-discord@v1
+      with:
+        webhook: ${{ secrets.DISCORD_WEBHOOK }}
+        status: ${{ job.status }}
+        title: "Build Result"
+        description: |
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+          
+          Download artifacts from:
+          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
