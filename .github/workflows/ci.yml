@@ -213,14 +213,68 @@ jobs:
         $testDir = "test_environment"
         New-Item -ItemType Directory -Force -Path $testDir
         
-        # Verify Server deployment
-        if (-not (Test-Path "..\Server\deploy\Server.exe")) {
-            Write-Error "Server.exe not found in expected location"
-            exit 1
+        # Verify Server deployment and dependencies
+        Write-Host "Verifying Server deployment..."
+        $serverFiles = @(
+            "..\Server\deploy\Server.exe",
+            "..\Server\deploy\Qt6Core.dll",
+            "..\Server\deploy\Qt6Network.dll",
+            "..\Server\deploy\Qt6WebSockets.dll"
+        )
+        
+        foreach ($file in $serverFiles) {
+            if (-not (Test-Path $file)) {
+                Write-Error "Missing Server file: $file"
+                exit 1
+            }
         }
         
-        # Start Server in background with verbose logging
+        # Create required server directories and files
+        Write-Host "Setting up Server environment..."
+        $serverDirs = @(
+            "..\Server\deploy\account",
+            "..\Server\deploy\timesheet",
+            "..\Server\deploy\data",
+            "..\Server\deploy\status\$((Get-Date).ToString('yyyy-MM-dd'))"
+        )
+        
+        foreach ($dir in $serverDirs) {
+            New-Item -ItemType Directory -Force -Path $dir
+            Write-Host "Created directory: $dir"
+        }
+        
+        # Initialize JSON files
+        $jsonFiles = @{
+            "..\Server\deploy\account\account.json" = '{"users": []}'
+            "..\Server\deploy\timesheet\timesheet.json" = '{"entries": []}'
+            "..\Server\deploy\data\points.json" = '{"points": {}}'
+            "..\Server\deploy\status\$((Get-Date).ToString('yyyy-MM-dd'))\status.json" = '{"status": []}'
+        }
+        
+        foreach ($file in $jsonFiles.Keys) {
+            Set-Content -Path $file -Value $jsonFiles[$file]
+            Write-Host "Created file: $file with content: $($jsonFiles[$file])"
+        }
+        
+        # Check network ports
+        Write-Host "Checking network ports..."
+        $usedPorts = netstat -ano | Select-String ":8080"
+        if ($usedPorts) {
+            Write-Host "Port 8080 is in use. Current processes:"
+            $usedPorts
+            Write-Host "Attempting to free port 8080..."
+            $usedPorts | ForEach-Object {
+                if ($_ -match ":8080.*LISTENING.*?(\d+)") {
+                    $pid = $matches[1]
+                    Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+                    Write-Host "Stopped process with PID: $pid"
+                }
+            }
+        }
+        
+        # Start Server with detailed logging
         Write-Host "Starting Server..."
+        $env:QT_LOGGING_RULES="*.debug=true"
         $serverProcess = Start-Process -FilePath "..\Server\deploy\Server.exe" `
             -WorkingDirectory "..\Server\deploy" `
             -PassThru `
@@ -230,29 +284,57 @@ jobs:
         
         Write-Host "Server started with PID: $($serverProcess.Id)"
         
-        # Wait for server to initialize and verify it's running
+        # Monitor server startup
         $maxWait = 30
         $waited = 0
         $serverReady = $false
         
         while ($waited -lt $maxWait -and -not $serverReady) {
-            if (Get-Content "server_output.log" | Select-String "Server accessible at") {
+            # Check process is still running
+            if (-not (Get-Process -Id $serverProcess.Id -ErrorAction SilentlyContinue)) {
+                Write-Error "Server process terminated unexpectedly"
+                Write-Host "Server Output:"
+                Get-Content "server_output.log"
+                Write-Host "Server Errors:"
+                Get-Content "server_error.log"
+                exit 1
+            }
+            
+            # Check server logs
+            $serverLog = Get-Content "server_output.log" -ErrorAction SilentlyContinue
+            $serverErrorLog = Get-Content "server_error.log" -ErrorAction SilentlyContinue
+            
+            if ($serverLog) {
+                Write-Host "Current server log:"
+                Write-Host $serverLog
+            }
+            
+            if ($serverErrorLog) {
+                Write-Host "Current server error log:"
+                Write-Host $serverErrorLog
+            }
+            
+            if ($serverLog | Select-String "Server accessible at") {
                 $serverReady = $true
                 Write-Host "Server initialized successfully"
-            } else {
-                Start-Sleep -Seconds 1
-                $waited++
-                Write-Host "Waiting for server... ($waited/$maxWait)"
+                break
             }
+            
+            Start-Sleep -Seconds 1
+            $waited++
+            Write-Host "Waiting for server... ($waited/$maxWait)"
         }
         
         if (-not $serverReady) {
             Write-Error "Server failed to initialize within $maxWait seconds"
-            Get-Content "server_output.log"
-            Get-Content "server_error.log"
+            Write-Host "Final server status:"
+            Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
+            Write-Host "Network status:"
+            netstat -ano | Select-String "LISTENING"
             exit 1
         }
-        
+
+        # Continue with Client testing...
         # Verify Client deployment
         if (-not (Test-Path "deploy\Client.exe")) {
             Write-Error "Client.exe not found in expected location"
