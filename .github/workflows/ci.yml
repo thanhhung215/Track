@@ -26,6 +26,11 @@ jobs:
     - name: Set up MSVC
       uses: microsoft/setup-msbuild@v1.1
 
+    - name: Setup Visual Studio Environment
+      uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: x64
+
     - name: Create Build Directory
       run: |
         if (Test-Path build) { Remove-Item build -Recurse -Force }
