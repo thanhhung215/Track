@@ -73,21 +73,33 @@ jobs:
         $waited = 0
         $serverStarted = $false
         while ($waited -lt $maxWait -and -not $serverStarted) {
-            if (Get-Content "server_output.log" | Select-String "HTTP server is listening on port 8080") {
+            if (Get-Content "server_output.log" | Select-String "HTTP server is listening on port") {
                 $serverStarted = $true
                 Write-Host "Server startup detected in logs"
                 break
             }
+            # Also check for TCP server startup
+            if (Get-Content "server_output.log" | Select-String "Server started!") {
+                Write-Host "TCP Server startup detected"
+            }
+            
+            # Show current log content
+            Write-Host "Current log content (${waited}s):"
+            Get-Content "server_output.log"
+            
             Start-Sleep -Seconds 1
             $waited++
         }
         
         if (-not $serverStarted) {
             Write-Error "Server did not start properly within $maxWait seconds"
+            Write-Host "Final log content:"
             Write-Host "Server stdout:"
             Get-Content "server_output.log"
             Write-Host "Server stderr:"
             Get-Content "server_error.log"
+            Write-Host "Process status:"
+            Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
             exit 1
         }
         
@@ -132,6 +144,7 @@ jobs:
             Write-Error "HTTP test failed on all addresses"
             Write-Host "Final process status:"
             Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
+            Write-Host "Final log content:"
             Get-Content "server_error.log"
             Get-Content "server_output.log"
             exit 1
