@@ -134,6 +134,13 @@ void server::setupHttpServer() {
             qDebug() << "Server might be accessible at:" << "http://" + address.toString() + ":8080";
         }
     }
+
+    // Khởi động HTTP server
+    if (!httpServer->listen()) {
+        qDebug() << "Failed to start HTTP server:" << httpServer->errorString();
+    } else {
+        qDebug() << "HTTP server is listening on port" << httpServer->property("port").toInt();
+    }
 }
 
 void server::handleImageUpload(const QHttpServerRequest &request) {

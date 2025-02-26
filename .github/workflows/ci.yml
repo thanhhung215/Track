@@ -62,49 +62,65 @@ jobs:
     # Test Server
     - name: Test Server
       run: |
-        # Start Server with output redirection
-        $serverProcess = Start-Process -FilePath "deploy\Server.exe" -WorkingDirectory "deploy" -PassThru -RedirectStandardOutput "server_output.log" -RedirectStandardError "server_error.log"
+        # Start Server with output redirection and wait for output
+        $serverProcess = Start-Process -FilePath "deploy\Server.exe" -WorkingDirectory "deploy" -PassThru -RedirectStandardOutput "server_output.log" -RedirectStandardError "server_error.log" -NoNewWindow
         
         Write-Host "Server process started with PID: $($serverProcess.Id)"
         Write-Host "Waiting for server to initialize..."
         
-        # Wait longer for server to start
-        Start-Sleep -Seconds 15
+        # Wait and check for server startup in logs
+        $maxWait = 30
+        $waited = 0
+        $serverStarted = $false
+        while ($waited -lt $maxWait -and -not $serverStarted) {
+            if (Get-Content "server_output.log" | Select-String "HTTP server is listening on port 8080") {
+                $serverStarted = $true
+                Write-Host "Server startup detected in logs"
+                break
+            }
+            Start-Sleep -Seconds 1
+            $waited++
+        }
         
-        # Check if server is still running
-        if ($serverProcess.HasExited) {
-            Write-Error "Server process exited prematurely"
-            Get-Content "server_error.log"
+        if (-not $serverStarted) {
+            Write-Error "Server did not start properly within $maxWait seconds"
+            Write-Host "Server stdout:"
             Get-Content "server_output.log"
+            Write-Host "Server stderr:"
+            Get-Content "server_error.log"
             exit 1
         }
         
-        # Display server logs for debugging
-        Write-Host "Server stdout:"
-        Get-Content "server_output.log"
-        Write-Host "Server stderr:"
-        Get-Content "server_error.log"
+        # Display network information
+        Write-Host "Network interfaces:"
+        ipconfig /all
         
-        # Test HTTP Server
-        $maxRetries = 3
-        $retryCount = 0
+        Write-Host "Active TCP Listeners:"
+        netstat -ano | Select-String "LISTENING"
+        
+        # Try different addresses
+        $addresses = @(
+            "localhost",
+            "127.0.0.1",
+            "0.0.0.0",
+            $env:COMPUTERNAME,
+            (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -eq "Ethernet" }).IPAddress
+        )
+        
         $success = $false
-        
-        while ($retryCount -lt $maxRetries -and -not $success) {
+        foreach ($addr in $addresses) {
+            Write-Host "Testing connection to $addr`:8080"
             try {
-                Write-Host "Attempting to connect to server (Attempt $($retryCount + 1))"
-                $response = Invoke-WebRequest -Uri "http://localhost:8080" -TimeoutSec 10
-                if ($response.StatusCode -eq 200) { 
-                    Write-Host "HTTP test passed"
+                $response = Invoke-WebRequest -Uri "http://$addr`:8080" -TimeoutSec 5
+                if ($response.StatusCode -eq 200) {
+                    Write-Host "Successfully connected to $addr`:8080"
+                    Write-Host "Response: $($response.Content)"
                     $success = $true
-                } else {
-                    Write-Host "Received status code: $($response.StatusCode)"
+                    break
                 }
             }
             catch {
-                Write-Host "Connection attempt failed: $_"
-                Start-Sleep -Seconds 5
-                $retryCount++
+                Write-Host "Failed to connect to $addr`:8080: $_"
             }
         }
         
@@ -113,7 +129,9 @@ jobs:
         
         # Check test results
         if (-not $success) {
-            Write-Error "HTTP test failed after $maxRetries attempts"
+            Write-Error "HTTP test failed on all addresses"
+            Write-Host "Final process status:"
+            Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
             Get-Content "server_error.log"
             Get-Content "server_output.log"
             exit 1
