@@ -99,8 +99,9 @@ server::~server()
 }
 
 void server::setupHttpServer() {
-    // Thiết lập port cho HTTP server
+    // Cấu hình port và address thông qua properties
     httpServer->setProperty("port", 8080);
+    httpServer->setProperty("address", QHostAddress::Any);
     
     // Define a route for uploading images
     httpServer->route("/avatar", QHttpServerRequest::Method::Post, [this](const QHttpServerRequest &request) {
@@ -123,11 +124,10 @@ void server::setupHttpServer() {
     
     // Ghi log thông tin
     qDebug() << "HTTP server routes configured successfully";
-    qDebug() << "Note: In Qt 6.8.0, QHttpServer might use properties to configure the server";
+    qDebug() << "Note: In Qt 6.8.0, QHttpServer uses properties to configure the server";
     qDebug() << "Server should now be listening on port 8080";
-    qDebug() << "Try accessing the server at http://localhost:8080 or via the IP address of this machine";
     
-    // Hiển thị thông tin hữu ích khác
+    // Hiển thị thông tin hữu ích về các địa chỉ IP có thể truy cập
     QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
     for (const QHostAddress &address : ipAddressesList) {
         if (address.protocol() == QAbstractSocket::IPv4Protocol && address != QHostAddress::LocalHost) {
