@@ -113,15 +113,19 @@ void server::setupHttpServer() {
         return response;
     });
 
-    // For Qt 6.8.0, we need to use a different method to start the server
-    qDebug() << "Attempting to start HTTP server on port 8080";
-    
-    // Instead of trying to bind/listen (which is causing compilation issues),
-    // we'll just log that we need to implement this properly for Qt 6.8.0
-    qDebug() << "Note: HTTP server functionality needs to be implemented for Qt 6.8.0";
-    
-    // TODO: Research the proper way to start a QHttpServer in Qt 6.8.0
-    // and implement it here.
+    // Trong Qt 6.8.0, sử dụng phương thức listen mới
+    bool success = false;
+    try {
+        // Thử sử dụng phương thức mới trong Qt 6.8.0
+        success = httpServer->route("/").listen(QHostAddress::Any, 8080);
+        if (success) {
+            qDebug() << "HTTP server started on port 8080";
+        } else {
+            qDebug() << "Failed to start HTTP server";
+        }
+    } catch (const std::exception& e) {
+        qDebug() << "Exception while starting HTTP server:" << e.what();
+    }
 }
 
 void server::handleImageUpload(const QHttpServerRequest &request) {
