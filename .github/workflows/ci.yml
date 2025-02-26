@@ -62,7 +62,40 @@ jobs:
     # Test Server
     - name: Test Server
       run: |
-        # Start Server with output redirection and wait for output
+        # Create necessary directories and files
+        Write-Host "Setting up required directories and files..."
+        
+        # Create account directory and JSON file
+        $accountDir = "deploy\account"
+        New-Item -ItemType Directory -Force -Path $accountDir
+        @"
+        {
+            "users": []
+        }
+"@ | Out-File -FilePath "$accountDir\account.json" -Encoding UTF8
+        
+        # Create timesheet directory and file
+        $timesheetDir = "deploy\timesheet"
+        New-Item -ItemType Directory -Force -Path $timesheetDir
+        @"
+        {
+            "entries": []
+        }
+"@ | Out-File -FilePath "$timesheetDir\timesheet.json" -Encoding UTF8
+        
+        # Create data directory for other JSON files
+        $dataDir = "deploy\data"
+        New-Item -ItemType Directory -Force -Path $dataDir
+        @"
+        {
+            "points": {}
+        }
+"@ | Out-File -FilePath "$dataDir\points.json" -Encoding UTF8
+        
+        Write-Host "Directory structure created:"
+        Get-ChildItem -Path "deploy" -Recurse
+        
+        # Start Server with output redirection
         $serverProcess = Start-Process -FilePath "deploy\Server.exe" -WorkingDirectory "deploy" -PassThru -RedirectStandardOutput "server_output.log" -RedirectStandardError "server_error.log" -NoNewWindow
         
         Write-Host "Server process started with PID: $($serverProcess.Id)"
@@ -72,20 +105,21 @@ jobs:
         $maxWait = 30
         $waited = 0
         $serverStarted = $false
+        $serverIP = ""
         while ($waited -lt $maxWait -and -not $serverStarted) {
             # Check both output and server.log
             $logContent = Get-Content "server_output.log" -ErrorAction SilentlyContinue
             $serverLogContent = Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
             
-            if ($logContent -match "HTTP server is listening on port" -or $serverLogContent -match "HTTP server is listening on port") {
+            # Try to extract the IP address from the log
+            if ($serverLogContent -match 'Server accessible at: "http://([^:]+):8080"') {
+                $serverIP = $matches[1]
                 $serverStarted = $true
-                Write-Host "Server startup detected in logs"
+                Write-Host "Server startup detected in logs at IP: $serverIP"
                 break
             }
             
             # Show current log content
-            Write-Host "Current output log content (${waited}s):"
-            if ($logContent) { $logContent }
             Write-Host "Current server log content (${waited}s):"
             if ($serverLogContent) { $serverLogContent }
             
@@ -97,61 +131,34 @@ jobs:
             Write-Error "Server did not start properly within $maxWait seconds"
             Write-Host "Process status:"
             Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
-            Write-Host "Final output log content:"
-            Get-Content "server_output.log" -ErrorAction SilentlyContinue
             Write-Host "Final server log content:"
             Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
-            Write-Host "Server stderr:"
-            Get-Content "server_error.log" -ErrorAction SilentlyContinue
             exit 1
         }
         
-        # Display network information
-        Write-Host "Network interfaces:"
-        ipconfig /all
-        
-        Write-Host "Active TCP Listeners:"
-        netstat -ano | Select-String "LISTENING"
-        
-        # Try different addresses
-        $addresses = @(
-            "localhost",
-            "127.0.0.1",
-            "0.0.0.0",
-            $env:COMPUTERNAME,
-            (Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -eq "Ethernet" }).IPAddress
-        )
-        
-        $success = $false
-        foreach ($addr in $addresses) {
-            Write-Host "Testing connection to $addr`:8080"
-            try {
-                $response = Invoke-WebRequest -Uri "http://$addr`:8080" -TimeoutSec 5
-                if ($response.StatusCode -eq 200) {
-                    Write-Host "Successfully connected to $addr`:8080"
-                    Write-Host "Response: $($response.Content)"
-                    $success = $true
-                    break
-                }
+        # Try to connect using the extracted IP
+        Write-Host "Testing connection to $serverIP`:8080"
+        try {
+            $response = Invoke-WebRequest -Uri "http://$serverIP`:8080" -TimeoutSec 5
+            if ($response.StatusCode -eq 200) {
+                Write-Host "Successfully connected to $serverIP`:8080"
+                Write-Host "Response: $($response.Content)"
+            } else {
+                Write-Error "Received unexpected status code: $($response.StatusCode)"
+                exit 1
             }
-            catch {
-                Write-Host "Failed to connect to $addr`:8080: $_"
-            }
+        }
+        catch {
+            Write-Error "Failed to connect to $serverIP`:8080: $_"
+            Write-Host "Network interfaces:"
+            ipconfig /all
+            Write-Host "Active TCP Listeners:"
+            netstat -ano | Select-String "LISTENING"
+            exit 1
         }
         
         # Kill Server process
         Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
-        
-        # Check test results
-        if (-not $success) {
-            Write-Error "HTTP test failed on all addresses"
-            Write-Host "Final process status:"
-            Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
-            Write-Host "Final log content:"
-            Get-Content "server_error.log"
-            Get-Content "server_output.log"
-            exit 1
-        }
       working-directory: Server
 
     # Build Client
