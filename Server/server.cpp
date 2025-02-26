@@ -113,9 +113,19 @@ void server::setupHttpServer() {
         return response;
     });
 
-    // Start listening on port 8080
-    const auto port = httpServer->listen(QHostAddress::Any, 8080);
-    if (!port) {
+    // Start the server on port 8080
+    bool success = false;
+    quint16 port = 8080;
+    
+    // Try different methods that might be available in current Qt version
+    try {
+        success = httpServer->bindAndListen(port, QHostAddress::Any);
+    } catch (...) {
+        qDebug() << "Exception while trying to start HTTP server";
+        success = false;
+    }
+    
+    if (!success) {
         qDebug() << "Failed to start HTTP server";
     } else {
         qDebug() << "HTTP server started on port" << port;
