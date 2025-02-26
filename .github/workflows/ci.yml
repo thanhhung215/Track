@@ -104,16 +104,22 @@ jobs:
             if ($serverLogContent) { 
                 Write-Host $serverLogContent
                 
-                # Try different patterns to match the IP
-                if ($serverLogContent -match 'Server accessible at: "?http://([0-9.]+):8080"?') {
-                    $serverIP = $matches[1]
-                    $serverStarted = $true
-                    Write-Host "Server startup detected in logs at IP: $serverIP"
-                    break
+                # Split log content into lines
+                $logLines = $serverLogContent -split ' '
+                foreach ($line in $logLines) {
+                    if ($line -match 'http://([0-9.]+):8080') {
+                        $serverIP = $matches[1]
+                        $serverStarted = $true
+                        Write-Host "Server startup detected in logs at IP: $serverIP"
+                        break
+                    }
                 }
-                elseif ($serverLogContent -match 'HTTP server is listening on port') {
-                    # If we see the listening message, use the network adapter IP
-                    $networkIP = Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -like "172.*" } | Select-Object -ExpandProperty IPAddress
+                
+                if (-not $serverStarted -and ($serverLogContent -match 'HTTP server is listening on port')) {
+                    # If we see the listening message but no IP, use the first available IP
+                    $networkIP = Get-NetIPAddress -AddressFamily IPv4 | 
+                        Where-Object { $_.IPAddress -like "172.*" -or $_.IPAddress -like "10.*" } | 
+                        Select-Object -First 1 -ExpandProperty IPAddress
                     if ($networkIP) {
                         $serverIP = $networkIP
                         $serverStarted = $true
