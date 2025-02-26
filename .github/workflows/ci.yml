@@ -32,23 +32,24 @@ jobs:
       with:
         arch: x64
 
-    - name: Create Build Directory
+    # Build Server
+    - name: Create Server Build Directory
       run: |
         if (Test-Path build) { Remove-Item build -Recurse -Force }
         mkdir build
       working-directory: Server
 
-    - name: Configure QMake
+    - name: Configure Server QMake
       run: |
         qmake ..\Server.pro -spec win32-msvc
       working-directory: Server/build
 
-    - name: Build
+    - name: Build Server
       run: |
         nmake
       working-directory: Server/build
 
-    - name: Deploy
+    - name: Deploy Server
       run: |
         if (Test-Path deploy) { Remove-Item deploy -Recurse -Force }
         mkdir deploy
@@ -56,8 +57,40 @@ jobs:
         windeployqt deploy\Server.exe
       working-directory: Server
 
-    - name: Upload artifacts
+    # Build Client
+    - name: Create Client Build Directory
+      run: |
+        if (Test-Path build) { Remove-Item build -Recurse -Force }
+        mkdir build
+      working-directory: Client
+
+    - name: Configure Client QMake
+      run: |
+        qmake ..\Client.pro -spec win32-msvc
+      working-directory: Client/build
+
+    - name: Build Client
+      run: |
+        nmake
+      working-directory: Client/build
+
+    - name: Deploy Client
+      run: |
+        if (Test-Path deploy) { Remove-Item deploy -Recurse -Force }
+        mkdir deploy
+        copy build\release\Client.exe deploy\
+        windeployqt deploy\Client.exe
+      working-directory: Client
+
+    # Upload artifacts
+    - name: Upload Server artifacts
       uses: actions/upload-artifact@v4
       with:
         name: Server-Windows
         path: Server/deploy/
+
+    - name: Upload Client artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: Client-Windows
+        path: Client/deploy/
