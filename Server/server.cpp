@@ -103,14 +103,13 @@ void server::setupHttpServer() {
     httpServer->setProperty("port", 8080);
     httpServer->setProperty("address", QHostAddress::Any);
     
-    // Define a route for uploading images
+    // Define routes...
     httpServer->route("/avatar", QHttpServerRequest::Method::Post, [this](const QHttpServerRequest &request) {
         handleImageUpload(request);
         QHttpServerResponse response(QHttpServerResponse::StatusCode::Ok);
         return response;
     });
 
-    // Define a route for uploading videos
     httpServer->route("/intro", QHttpServerRequest::Method::Post, [this](const QHttpServerRequest &request) {
         handleVideoUpload(request);
         QHttpServerResponse response(QHttpServerResponse::StatusCode::Ok);
@@ -119,27 +118,23 @@ void server::setupHttpServer() {
 
     // Định nghĩa route root
     httpServer->route("/", [](const QHttpServerRequest &) {
-        return QHttpServerResponse("HTTP Server is running");
+        return QHttpServerResponse("HTTP server is listening on port 8080");
     });
     
-    // Ghi log thông tin
-    qDebug() << "HTTP server routes configured successfully";
-    qDebug() << "Note: In Qt 6.8.0, QHttpServer uses properties to configure the server";
-    qDebug() << "Server should now be listening on port 8080";
-    
-    // Hiển thị thông tin hữu ích về các địa chỉ IP có thể truy cập
-    QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
-    for (const QHostAddress &address : ipAddressesList) {
-        if (address.protocol() == QAbstractSocket::IPv4Protocol && address != QHostAddress::LocalHost) {
-            qDebug() << "Server might be accessible at:" << "http://" + address.toString() + ":8080";
-        }
-    }
-
     // Khởi động HTTP server
-    if (!httpServer->listen()) {
-        qDebug() << "Failed to start HTTP server:" << httpServer->errorString();
+    const auto port = httpServer->listen(QHostAddress::Any, 8080);
+    if (!port) {
+        qDebug() << "Failed to start HTTP server on port 8080";
     } else {
-        qDebug() << "HTTP server is listening on port" << httpServer->property("port").toInt();
+        qDebug() << "HTTP server is listening on port" << port;
+        
+        // Hiển thị thông tin hữu ích về các địa chỉ IP có thể truy cập
+        QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
+        for (const QHostAddress &address : ipAddressesList) {
+            if (address.protocol() == QAbstractSocket::IPv4Protocol && address != QHostAddress::LocalHost) {
+                qDebug() << "Server accessible at:" << "http://" + address.toString() + ":" + QString::number(port);
+            }
+        }
     }
 }
 
