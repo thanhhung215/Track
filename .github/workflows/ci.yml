@@ -27,7 +27,9 @@ jobs:
       uses: microsoft/setup-msbuild@v1.1
 
     - name: Create Build Directory
-      run: mkdir build
+      run: |
+        if (Test-Path build) { Remove-Item build -Recurse -Force }
+        mkdir build
       working-directory: Server
 
     - name: Configure QMake
@@ -42,6 +44,7 @@ jobs:
 
     - name: Deploy
       run: |
+        if (Test-Path deploy) { Remove-Item deploy -Recurse -Force }
         mkdir deploy
         copy build\release\Server.exe deploy\
         windeployqt deploy\Server.exe
