@@ -28,13 +28,13 @@
 #include <QHttpServer>
 #include <QHttpServerRequest>
 #include <QHttpServerResponse>
-#include <QFile>
 #include <QSaveFile>
 #include <QImageReader>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
 
 Q_LOGGING_CATEGORY(serverCategory, "server")
+Q_LOGGING_CATEGORY(serverLog, "server.log")
 
 server::server(QWidget *parent)
     : QMainWindow(parent),
@@ -99,18 +99,61 @@ server::~server()
 }
 
 void server::setupHttpServer() {
+    // Cấu hình logging
+    qSetMessagePattern("[%{time yyyy-MM-dd hh:mm:ss.zzz}] %{type} %{message}");
+    
+    // Redirect qDebug to file
+    QFile *logFile = new QFile("server.log");
+    logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append);
+    if (logFile->isOpen()) {
+        qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &context, const QString &msg) {
+            static QFile *logFile = nullptr;
+            if (!logFile) {
+                logFile = new QFile("server.log");
+                logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append);
+            }
+            
+            QString txt;
+            switch (type) {
+                case QtDebugMsg:
+                    txt = QString("Debug: %1").arg(msg);
+                    break;
+                case QtWarningMsg:
+                    txt = QString("Warning: %1").arg(msg);
+                    break;
+                case QtCriticalMsg:
+                    txt = QString("Critical: %1").arg(msg);
+                    break;
+                case QtFatalMsg:
+                    txt = QString("Fatal: %1").arg(msg);
+                    break;
+                default:
+                    txt = QString("Info: %1").arg(msg);
+                    break;
+            }
+            
+            QTextStream ts(logFile);
+            ts << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz ") << txt << Qt::endl;
+            fprintf(stderr, "%s\n", txt.toLocal8Bit().constData());
+        });
+    }
+
+    qInfo() << "Setting up HTTP server...";
+    
     // Cấu hình port và address thông qua properties
     httpServer->setProperty("port", 8080);
     httpServer->setProperty("address", QHostAddress::Any);
     
     // Define routes...
     httpServer->route("/avatar", QHttpServerRequest::Method::Post, [this](const QHttpServerRequest &request) {
+        qInfo() << "Received avatar upload request";
         handleImageUpload(request);
         QHttpServerResponse response(QHttpServerResponse::StatusCode::Ok);
         return response;
     });
 
     httpServer->route("/intro", QHttpServerRequest::Method::Post, [this](const QHttpServerRequest &request) {
+        qInfo() << "Received video upload request";
         handleVideoUpload(request);
         QHttpServerResponse response(QHttpServerResponse::StatusCode::Ok);
         return response;
@@ -118,21 +161,22 @@ void server::setupHttpServer() {
 
     // Định nghĩa route root
     httpServer->route("/", [](const QHttpServerRequest &) {
+        qInfo() << "Received request to root route";
         return QHttpServerResponse("HTTP server is listening on port 8080");
     });
     
     // Khởi động HTTP server
     const auto port = httpServer->listen(QHostAddress::Any, 8080);
     if (!port) {
-        qDebug() << "Failed to start HTTP server on port 8080";
+        qCritical() << "Failed to start HTTP server on port 8080";
     } else {
-        qDebug() << "HTTP server is listening on port" << port;
+        qInfo() << "HTTP server is listening on port" << port;
         
         // Hiển thị thông tin hữu ích về các địa chỉ IP có thể truy cập
         QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
         for (const QHostAddress &address : ipAddressesList) {
             if (address.protocol() == QAbstractSocket::IPv4Protocol && address != QHostAddress::LocalHost) {
-                qDebug() << "Server accessible at:" << "http://" + address.toString() + ":" + QString::number(port);
+                qInfo() << "Server accessible at:" << "http://" + address.toString() + ":" + QString::number(port);
             }
         }
     }

@@ -73,19 +73,21 @@ jobs:
         $waited = 0
         $serverStarted = $false
         while ($waited -lt $maxWait -and -not $serverStarted) {
-            if (Get-Content "server_output.log" | Select-String "HTTP server is listening on port") {
+            # Check both output and server.log
+            $logContent = Get-Content "server_output.log" -ErrorAction SilentlyContinue
+            $serverLogContent = Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
+            
+            if ($logContent -match "HTTP server is listening on port" -or $serverLogContent -match "HTTP server is listening on port") {
                 $serverStarted = $true
                 Write-Host "Server startup detected in logs"
                 break
             }
-            # Also check for TCP server startup
-            if (Get-Content "server_output.log" | Select-String "Server started!") {
-                Write-Host "TCP Server startup detected"
-            }
             
             # Show current log content
-            Write-Host "Current log content (${waited}s):"
-            Get-Content "server_output.log"
+            Write-Host "Current output log content (${waited}s):"
+            if ($logContent) { $logContent }
+            Write-Host "Current server log content (${waited}s):"
+            if ($serverLogContent) { $serverLogContent }
             
             Start-Sleep -Seconds 1
             $waited++
@@ -93,13 +95,14 @@ jobs:
         
         if (-not $serverStarted) {
             Write-Error "Server did not start properly within $maxWait seconds"
-            Write-Host "Final log content:"
-            Write-Host "Server stdout:"
-            Get-Content "server_output.log"
-            Write-Host "Server stderr:"
-            Get-Content "server_error.log"
             Write-Host "Process status:"
             Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
+            Write-Host "Final output log content:"
+            Get-Content "server_output.log" -ErrorAction SilentlyContinue
+            Write-Host "Final server log content:"
+            Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
+            Write-Host "Server stderr:"
+            Get-Content "server_error.log" -ErrorAction SilentlyContinue
             exit 1
         }
         
