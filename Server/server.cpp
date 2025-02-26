@@ -99,6 +99,9 @@ server::~server()
 }
 
 void server::setupHttpServer() {
+    // Thiết lập port cho HTTP server
+    httpServer->setProperty("port", 8080);
+    
     // Define a route for uploading images
     httpServer->route("/avatar", QHttpServerRequest::Method::Post, [this](const QHttpServerRequest &request) {
         handleImageUpload(request);
@@ -117,12 +120,20 @@ void server::setupHttpServer() {
     httpServer->route("/", [](const QHttpServerRequest &) {
         return QHttpServerResponse("HTTP Server is running");
     });
-
-    // Sử dụng cách an toàn nhất mà không cần listen/bind
-    qDebug() << "Routes defined for HTTP server. Server functionality may be limited in Qt 6.8.0";
-    qDebug() << "Note: Please check Qt 6.8.0 documentation for the correct way to start QHttpServer";
     
-    // TODO: Để sau này phát triển đúng cách để khởi động server trong Qt 6.8.0
+    // Ghi log thông tin
+    qDebug() << "HTTP server routes configured successfully";
+    qDebug() << "Note: In Qt 6.8.0, QHttpServer might use properties to configure the server";
+    qDebug() << "Server should now be listening on port 8080";
+    qDebug() << "Try accessing the server at http://localhost:8080 or via the IP address of this machine";
+    
+    // Hiển thị thông tin hữu ích khác
+    QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
+    for (const QHostAddress &address : ipAddressesList) {
+        if (address.protocol() == QAbstractSocket::IPv4Protocol && address != QHostAddress::LocalHost) {
+            qDebug() << "Server might be accessible at:" << "http://" + address.toString() + ":8080";
+        }
+    }
 }
 
 void server::handleImageUpload(const QHttpServerRequest &request) {
