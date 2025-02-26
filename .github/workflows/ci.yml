@@ -16,7 +16,7 @@ jobs:
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
-        version: '6.8.0'
+        version: '6.5.3'
         host: 'windows'
         target: 'desktop'
         arch: 'win64_msvc2019_64'
@@ -51,4 +51,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Server-Windows
-        path: Server/deploy/ 
+        path: Server/deploy/
