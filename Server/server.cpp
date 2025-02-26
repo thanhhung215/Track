@@ -113,22 +113,22 @@ void server::setupHttpServer() {
         return response;
     });
 
-    // Start the server on port 8080
-    bool success = false;
+    // Start the server using a different approach
     quint16 port = 8080;
     
-    // Try different methods that might be available in current Qt version
     try {
-        success = httpServer->bindAndListen(port, QHostAddress::Any);
+        // Try to use the listen method that takes a port number only
+        auto listeningPort = httpServer->listen(port);
+        
+        if (listeningPort) {
+            qDebug() << "HTTP server started on port" << *listeningPort;
+        } else {
+            qDebug() << "Failed to start HTTP server";
+        }
+    } catch (const std::exception& e) {
+        qDebug() << "Exception while trying to start HTTP server:" << e.what();
     } catch (...) {
-        qDebug() << "Exception while trying to start HTTP server";
-        success = false;
-    }
-    
-    if (!success) {
-        qDebug() << "Failed to start HTTP server";
-    } else {
-        qDebug() << "HTTP server started on port" << port;
+        qDebug() << "Unknown exception while trying to start HTTP server";
     }
 }
 // Hypothetical example: Manually parse headers from the request data
