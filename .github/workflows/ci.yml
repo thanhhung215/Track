@@ -68,32 +68,17 @@ jobs:
         # Create account directory and JSON file
         $accountDir = "deploy\account"
         New-Item -ItemType Directory -Force -Path $accountDir
-        $accountJson = @'
-        {
-            "users": []
-        }
-'@
-        $accountJson | Out-File -FilePath "$accountDir\account.json" -Encoding UTF8
+        Set-Content -Path "$accountDir\account.json" -Value '{"users": []}'
         
         # Create timesheet directory and file
         $timesheetDir = "deploy\timesheet"
         New-Item -ItemType Directory -Force -Path $timesheetDir
-        $timesheetJson = @'
-        {
-            "entries": []
-        }
-'@
-        $timesheetJson | Out-File -FilePath "$timesheetDir\timesheet.json" -Encoding UTF8
+        Set-Content -Path "$timesheetDir\timesheet.json" -Value '{"entries": []}'
         
         # Create data directory for other JSON files
         $dataDir = "deploy\data"
         New-Item -ItemType Directory -Force -Path $dataDir
-        $pointsJson = @'
-        {
-            "points": {}
-        }
-'@
-        $pointsJson | Out-File -FilePath "$dataDir\points.json" -Encoding UTF8
+        Set-Content -Path "$dataDir\points.json" -Value '{"points": {}}'
         
         Write-Host "Directory structure created:"
         Get-ChildItem -Path "deploy" -Recurse
