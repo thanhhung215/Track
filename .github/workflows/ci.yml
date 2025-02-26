@@ -79,6 +79,12 @@ jobs:
             exit 1
         }
         
+        # Display server logs for debugging
+        Write-Host "Server stdout:"
+        Get-Content "server_output.log"
+        Write-Host "Server stderr:"
+        Get-Content "server_error.log"
+        
         # Test HTTP Server
         $maxRetries = 3
         $retryCount = 0
@@ -232,3 +238,4 @@ jobs:
           
           Download artifacts from:
           ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        ack_no_webhook: true  # Suppress error when webhook is not configured
