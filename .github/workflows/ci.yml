@@ -21,6 +21,7 @@ jobs:
         target: 'desktop'
         arch: 'win64_msvc2019_64'
         tools: 'tools_qtcreator'
+        modules: 'qtwebsockets qtwebchannel qtwebengine qtwebview qthttpserver'
         cache: true
 
     - name: Set up MSVC
