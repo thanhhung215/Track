@@ -114,10 +114,11 @@ void server::setupHttpServer() {
     });
 
     // Start listening on port 8080
-    if (!httpServer->listen(QHostAddress::Any, 8080)) {
+    const auto port = httpServer->listen(QHostAddress::Any, 8080);
+    if (!port) {
         qDebug() << "Failed to start HTTP server";
     } else {
-        qDebug() << "HTTP server started on port 8080";
+        qDebug() << "HTTP server started on port" << port;
     }
 }
 // Hypothetical example: Manually parse headers from the request data
