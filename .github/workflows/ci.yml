@@ -62,25 +62,56 @@ jobs:
     # Test Server
     - name: Test Server
       run: |
-        Start-Process -FilePath "deploy\Server.exe" -WorkingDirectory "deploy"
-        Start-Sleep -Seconds 5  # Wait for server to start
+        # Start Server with output redirection
+        $serverProcess = Start-Process -FilePath "deploy\Server.exe" -WorkingDirectory "deploy" -PassThru -RedirectStandardOutput "server_output.log" -RedirectStandardError "server_error.log"
         
-        # Test HTTP Server
-        try {
-            $response = Invoke-WebRequest -Uri "http://localhost:8080" -TimeoutSec 10
-            if ($response.StatusCode -ne 200) { 
-                Write-Error "HTTP test failed: Status code $($response.StatusCode)"
-                exit 1 
-            }
-            Write-Host "HTTP test passed"
-        }
-        catch {
-            Write-Error "HTTP test failed: $_"
+        Write-Host "Server process started with PID: $($serverProcess.Id)"
+        Write-Host "Waiting for server to initialize..."
+        
+        # Wait longer for server to start
+        Start-Sleep -Seconds 15
+        
+        # Check if server is still running
+        if ($serverProcess.HasExited) {
+            Write-Error "Server process exited prematurely"
+            Get-Content "server_error.log"
+            Get-Content "server_output.log"
             exit 1
         }
         
+        # Test HTTP Server
+        $maxRetries = 3
+        $retryCount = 0
+        $success = $false
+        
+        while ($retryCount -lt $maxRetries -and -not $success) {
+            try {
+                Write-Host "Attempting to connect to server (Attempt $($retryCount + 1))"
+                $response = Invoke-WebRequest -Uri "http://localhost:8080" -TimeoutSec 10
+                if ($response.StatusCode -eq 200) { 
+                    Write-Host "HTTP test passed"
+                    $success = $true
+                } else {
+                    Write-Host "Received status code: $($response.StatusCode)"
+                }
+            }
+            catch {
+                Write-Host "Connection attempt failed: $_"
+                Start-Sleep -Seconds 5
+                $retryCount++
+            }
+        }
+        
         # Kill Server process
-        Stop-Process -Name "Server" -Force -ErrorAction SilentlyContinue
+        Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+        
+        # Check test results
+        if (-not $success) {
+            Write-Error "HTTP test failed after $maxRetries attempts"
+            Get-Content "server_error.log"
+            Get-Content "server_output.log"
+            exit 1
+        }
       working-directory: Server
 
     # Build Client
