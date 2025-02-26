@@ -113,13 +113,16 @@ void server::setupHttpServer() {
         return response;
     });
 
-    // Trong Qt 6.8.0, sử dụng phương thức listen mới
-    bool success = false;
+    // Định nghĩa route root và bắt đầu lắng nghe
+    httpServer->route("/", [](const QHttpServerRequest &) {
+        return QHttpServerResponse("HTTP Server is running");
+    });
+
+    // Bắt đầu lắng nghe
     try {
-        // Thử sử dụng phương thức mới trong Qt 6.8.0
-        success = httpServer->route("/").listen(QHostAddress::Any, 8080);
-        if (success) {
-            qDebug() << "HTTP server started on port 8080";
+        const auto port = httpServer->listen(QHostAddress::Any, 8080);
+        if (port) {
+            qDebug() << "HTTP server started on port" << *port;
         } else {
             qDebug() << "Failed to start HTTP server";
         }
