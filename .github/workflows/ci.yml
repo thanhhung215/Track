@@ -65,83 +65,33 @@ jobs:
         # Create necessary directories and files
         Write-Host "Setting up required directories and files..."
         
-        # Create account directory and JSON file
-        $accountDir = "deploy\account"
-        New-Item -ItemType Directory -Force -Path $accountDir
-        $accountJson = @'
-{
-    "users": [
-        {
-            "username": "test",
-            "password": "test123"
-        }
-    ]
-}
-'@
-        $accountJson | Out-File -FilePath "$accountDir\account.json" -Encoding UTF8
-        
-        # Create timesheet directory and file
-        $timesheetDir = "deploy\timesheet"
-        New-Item -ItemType Directory -Force -Path $timesheetDir
-        $timesheetJson = @'
-{
-    "entries": [
-        {
-            "date": "2025-02-26",
-            "records": []
-        }
-    ]
-}
-'@
-        $timesheetJson | Out-File -FilePath "$timesheetDir\timesheet.json" -Encoding UTF8
-        
-        # Create data directory for other JSON files
-        $dataDir = "deploy\data"
-        New-Item -ItemType Directory -Force -Path $dataDir
-        $pointsJson = @'
-{
-    "points": {
-        "test": 0
-    }
-}
-'@
-        $pointsJson | Out-File -FilePath "$dataDir\points.json" -Encoding UTF8
-        
-        # Verify files exist and are readable
-        $requiredFiles = @(
-            "$accountDir\account.json",
-            "$timesheetDir\timesheet.json",
-            "$dataDir\points.json"
+        # Create base directories
+        $baseDir = "deploy"
+        $dirs = @(
+            "$baseDir\account",
+            "$baseDir\timesheet",
+            "$baseDir\data",
+            "$baseDir\status\$((Get-Date).ToString('yyyy-MM-dd'))"
         )
         
-        foreach ($file in $requiredFiles) {
-            Write-Host "Checking file: $file"
-            if (Test-Path $file) {
-                $acl = Get-Acl $file
-                Write-Host "File exists with permissions:"
-                Write-Host $acl.AccessToString
-                
-                # Ensure file is readable
-                $content = Get-Content $file -Raw
-                Write-Host "File content:"
-                Write-Host $content
-            } else {
-                Write-Error "Required file not found: $file"
-                exit 1
-            }
+        foreach ($dir in $dirs) {
+            New-Item -ItemType Directory -Force -Path $dir
+        }
+        
+        # Create initial JSON files
+        $files = @{
+            "$baseDir\account\account.json" = '{"users": []}'
+            "$baseDir\timesheet\timesheet.json" = '{"entries": []}'
+            "$baseDir\data\points.json" = '{"points": {}}'
+            "$baseDir\status\$((Get-Date).ToString('yyyy-MM-dd'))\status.json" = '{"status": []}'
+        }
+        
+        foreach ($file in $files.Keys) {
+            Set-Content -Path $file -Value $files[$file]
         }
         
         Write-Host "Directory structure created:"
-        Get-ChildItem -Path "deploy" -Recurse | ForEach-Object {
-            $item = $_
-            if ($item.PSIsContainer) {
-                Write-Host "Dir:  $($item.FullName)"
-            } else {
-                $acl = Get-Acl $item.FullName
-                Write-Host "File: $($item.FullName)"
-                Write-Host "Permissions: $($acl.AccessToString)"
-            }
-        }
+        Get-ChildItem -Path "deploy" -Recurse
         
         # Start Server with output redirection
         $serverProcess = Start-Process -FilePath "deploy\Server.exe" -WorkingDirectory "deploy" -PassThru -RedirectStandardOutput "server_output.log" -RedirectStandardError "server_error.log" -NoNewWindow
@@ -155,6 +105,8 @@ jobs:
         $serverStarted = $false
         $serverIP = ""
         while ($waited -lt $maxWait -and -not $serverStarted) {
+            # Check both output and server.log
+            $logContent = Get-Content "server_output.log" -ErrorAction SilentlyContinue
             $serverLogContent = Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
             
             # Show current log content for debugging
@@ -162,12 +114,28 @@ jobs:
             if ($serverLogContent) { 
                 Write-Host $serverLogContent
                 
-                # Try to extract the IP address from the log
-                if ($serverLogContent -match 'Server accessible at: "http://([0-9.]+):8080"') {
-                    $serverIP = $matches[1]
-                    $serverStarted = $true
-                    Write-Host "Server startup detected in logs at IP: $serverIP"
-                    break
+                # Split log content into lines
+                $logLines = $serverLogContent -split ' '
+                foreach ($line in $logLines) {
+                    if ($line -match 'http://([0-9.]+):8080') {
+                        $serverIP = $matches[1]
+                        $serverStarted = $true
+                        Write-Host "Server startup detected in logs at IP: $serverIP"
+                        break
+                    }
+                }
+                
+                if (-not $serverStarted -and ($serverLogContent -match 'HTTP server is listening on port')) {
+                    # If we see the listening message but no IP, use the first available IP
+                    $networkIP = Get-NetIPAddress -AddressFamily IPv4 | 
+                        Where-Object { $_.IPAddress -like "172.*" -or $_.IPAddress -like "10.*" } | 
+                        Select-Object -First 1 -ExpandProperty IPAddress
+                    if ($networkIP) {
+                        $serverIP = $networkIP
+                        $serverStarted = $true
+                        Write-Host "Using network adapter IP: $serverIP"
+                        break
+                    }
                 }
             }
             
@@ -177,6 +145,14 @@ jobs:
         
         if (-not $serverStarted) {
             Write-Error "Server did not start properly within $maxWait seconds"
+            Write-Host "Process status:"
+            Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
+            Write-Host "Final server log content:"
+            Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
+            Write-Host "Network interfaces:"
+            ipconfig /all
+            Write-Host "Active TCP Listeners:"
+            netstat -ano | Select-String "LISTENING"
             exit 1
         }
         
@@ -194,6 +170,10 @@ jobs:
         }
         catch {
             Write-Error "Failed to connect to $serverIP`:8080: $_"
+            Write-Host "Network interfaces:"
+            ipconfig /all
+            Write-Host "Active TCP Listeners:"
+            netstat -ano | Select-String "LISTENING"
             exit 1
         }
         
