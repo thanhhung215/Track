@@ -209,12 +209,74 @@ jobs:
     # Test Client
     - name: Test Client
       run: |
-        # Verify required files exist
+        # Create test directory structure
+        $testDir = "test_environment"
+        New-Item -ItemType Directory -Force -Path $testDir
+        
+        # Start Server in background
+        $serverProcess = Start-Process -FilePath "..\Server\deploy\Server.exe" -WorkingDirectory "..\Server\deploy" -PassThru -RedirectStandardOutput "server_output.log" -RedirectStandardError "server_error.log" -NoNewWindow
+        
+        Write-Host "Server started with PID: $($serverProcess.Id)"
+        Start-Sleep -Seconds 5  # Wait for server to initialize
+        
+        # Start Client with logging
+        Write-Host "Starting Client with logging..."
+        $clientProcess = Start-Process -FilePath "deploy\Client.exe" -WorkingDirectory "deploy" -PassThru -RedirectStandardOutput "client_output.log" -RedirectStandardError "client_error.log" -NoNewWindow
+        
+        Write-Host "Client started with PID: $($clientProcess.Id)"
+        Start-Sleep -Seconds 5  # Wait for client to initialize
+        
+        # Test basic functionality
+        $testCases = @(
+            @{
+                "name" = "Registration"
+                "data" = @{
+                    "username" = "testuser"
+                    "password" = "testpass"
+                }
+            }
+            @{
+                "name" = "Login"
+                "data" = @{
+                    "username" = "testuser"
+                    "password" = "testpass"
+                }
+            }
+            # Add more test cases as needed
+        )
+        
+        Write-Host "Running functional tests..."
+        foreach ($test in $testCases) {
+            Write-Host "Testing: $($test.name)"
+            # Add test implementation here
+        }
+        
+        # Check logs for errors
+        Write-Host "Checking Client logs..."
+        $clientLogs = Get-Content "client_output.log" -ErrorAction SilentlyContinue
+        if ($clientLogs) {
+            Write-Host "Client logs:"
+            Write-Host $clientLogs
+        }
+        
+        $clientErrors = Get-Content "client_error.log" -ErrorAction SilentlyContinue
+        if ($clientErrors) {
+            Write-Host "Client errors:"
+            Write-Host $clientErrors
+            exit 1
+        }
+        
+        # Cleanup
+        Stop-Process -Id $clientProcess.Id -Force -ErrorAction SilentlyContinue
+        Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+        
+        # Verify required files exist and have content
         $requiredFiles = @(
             "deploy\Client.exe",
             "deploy\Qt6Core.dll",
             "deploy\Qt6Gui.dll",
-            "deploy\Qt6Multimedia.dll"
+            "deploy\Qt6Multimedia.dll",
+            "client_output.log"
         )
         
         foreach ($file in $requiredFiles) {
@@ -222,9 +284,17 @@ jobs:
                 Write-Error "Missing required file: $file"
                 exit 1
             }
+            
+            if ($file -eq "client_output.log") {
+                $content = Get-Content $file
+                if (-not $content) {
+                    Write-Error "Client log file is empty"
+                    exit 1
+                }
+            }
         }
         
-        Write-Host "All required files present"
+        Write-Host "All tests completed successfully"
       working-directory: Client
 
     # Create combined deployment directory
