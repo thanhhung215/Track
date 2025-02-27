@@ -49,11 +49,11 @@ server::server(QWidget *parent)
     
     // Kiểm tra và tạo thư mục
     QDir appDir(QCoreApplication::applicationDirPath());
-    QStringList requiredDirs = {"account", "status", "timesheet", "data"};
+    QStringList requiredDirs = {"account", "status", "timesheet", "data", "avatar", "intro", "points"};
     
     for (const QString &dir : requiredDirs) {
         if (!appDir.exists(dir)) {
-            if (!appDir.mkdir(dir)) {
+            if (!appDir.mkpath(dir)) {
                 qCritical() << "Failed to create directory:" << dir;
             } else {
                 qInfo() << "Created directory:" << dir;
@@ -61,17 +61,19 @@ server::server(QWidget *parent)
         }
     }
     
-    // Khởi tạo HTTP server
+    // Create initial JSON files if they don't exist
+    createInitialJsonFiles();
+    
+    // Khởi tạo HTTP server with a different port
     setupHttpServer();
     
-    qInfo() << "Server initialization completed";
-
+    // Initialize TCP server with a different port
     connect(tcpServer, &QTcpServer::newConnection, this, &server::onNewConnection);
     if (!tcpServer->isListening()) { // Check if the server is already listening
-        if (!tcpServer->listen(QHostAddress::Any, 1234)) {
-            qDebug() << "Server could not start!";
+        if (!tcpServer->listen(QHostAddress::Any, 1235)) { // Use port 1235 for TCP
+            qCritical() << "TCP Server could not start! Error:" << tcpServer->errorString();
         } else {
-            qDebug() << "Server started!";
+            qInfo() << "TCP Server started on port 1235!";
 
             // Get the IP address of the server
             QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
@@ -90,14 +92,12 @@ server::server(QWidget *parent)
             QUrl url;
             url.setScheme("http");
             url.setHost(ipAddress.toString());
-            url.setPort(1234);
-            qDebug() << "Access the server at:" << url.toString();
+            url.setPort(1235);
+            qInfo() << "Access the TCP server at:" << url.toString();
         }
     } else {
-        qDebug() << "Server is already listening!";
+        qInfo() << "TCP Server is already listening!";
     }
-    // Add another timer to call on_btnView_clicked every 10 seconds
-
 
     QTimer *clockTimer = new QTimer(this);
     connect(clockTimer, &QTimer::timeout, this, &server::updateClock);
@@ -110,7 +110,8 @@ server::server(QWidget *parent)
     connect(ui->btnCreate, &QPushButton::clicked, this, &server::on_btnCreate_clicked);
     connect(ui->btnDrop, &QPushButton::clicked, this, &server::on_btnDrop_clicked);
     connect(ui->btnChange, &QPushButton::clicked, this, &server::on_btnChange_clicked);
-
+    
+    qInfo() << "Server initialization completed";
 }
 
 server::~server()
@@ -128,14 +129,24 @@ void server::setupHttpServer() {
         return std::move(resp);
     });
 
-    const auto port = httpServer->listen(QHostAddress::Any, 1234);
+    // Try port 8080 instead of 1234
+    const auto port = httpServer->listen(QHostAddress::Any, 8080);
     if (!port) {
-        qCritical() << "Failed to start HTTP server on port 1234";
-        emit serverError("Failed to start HTTP server");
-        return;
+        qCritical() << "Failed to start HTTP server on port 8080";
+        // Try an alternative port
+        const auto altPort = httpServer->listen(QHostAddress::Any, 0); // Let the OS choose a port
+        if (!altPort) {
+            qCritical() << "Failed to start HTTP server on any port";
+            emit serverError("Failed to start HTTP server");
+            return;
+        } else {
+            qInfo() << "HTTP server started on alternative port" << altPort;
+        }
+    } else {
+        qInfo() << "HTTP server started successfully on port" << port;
     }
 
-    // Log tất cả các network interfaces
+    // Log all network interfaces
     const QList<QHostAddress> addresses = QNetworkInterface::allAddresses();
     for (const QHostAddress &address : addresses) {
         if (address.protocol() == QAbstractSocket::IPv4Protocol 
@@ -148,22 +159,25 @@ void server::setupHttpServer() {
     // Add routes for image and video uploads
     httpServer->route("/upload/image", QHttpServerRequest::Method::Post,
                      [this](const QHttpServerRequest &request) {
+        qInfo() << "Received image upload request";
         handleImageUpload(request);
         return QHttpServerResponse::StatusCode::Ok;
     });
     
     httpServer->route("/upload/video", QHttpServerRequest::Method::Post,
                      [this](const QHttpServerRequest &request) {
+        qInfo() << "Received video upload request";
         handleVideoUpload(request);
         return QHttpServerResponse::StatusCode::Ok;
     });
     
-    // Thêm route mặc định để test
+    // Add default route for testing
     httpServer->route("/", [] {
-        return QHttpServerResponse::StatusCode::Ok;
+        qInfo() << "Received request to root endpoint";
+        return QHttpServerResponse("Server is running");
     });
 
-    qInfo() << "HTTP server started successfully on port" << port;
+    qInfo() << "HTTP routes configured successfully";
 }
 
 void server::handleImageUpload(const QHttpServerRequest &request) {
@@ -1232,6 +1246,51 @@ void server::on_btnChange_clicked() {
         // Write the updated data back to the file
         loadedData["users"] = usersArray;
         saveJsonFile(loadedData); // Assuming you have a function to save the JSON file
+    }
+}
+
+void server::createInitialJsonFiles() {
+    QString baseDir = QCoreApplication::applicationDirPath();
+    
+    // Create account.json if it doesn't exist
+    QString accountPath = baseDir + "/account/account.json";
+    QFile accountFile(accountPath);
+    if (!accountFile.exists()) {
+        if (accountFile.open(QIODevice::WriteOnly)) {
+            QJsonObject rootObj;
+            QJsonArray usersArray;
+            rootObj["users"] = usersArray;
+            accountFile.write(QJsonDocument(rootObj).toJson());
+            accountFile.close();
+            qInfo() << "Created initial account.json file";
+        } else {
+            qCritical() << "Failed to create account.json file:" << accountFile.errorString();
+        }
+    }
+    
+    // Create initial status.json
+    QString date = QDateTime::currentDateTime().toString("yyyy-MM-dd");
+    QString statusDir = baseDir + "/status/" + date;
+    QDir dir;
+    if (!dir.exists(statusDir)) {
+        if (!dir.mkpath(statusDir)) {
+            qCritical() << "Failed to create status directory:" << statusDir;
+        }
+    }
+    
+    QString statusPath = statusDir + "/status.json";
+    QFile statusFile(statusPath);
+    if (!statusFile.exists()) {
+        if (statusFile.open(QIODevice::WriteOnly)) {
+            QJsonObject rootObj;
+            QJsonArray usersArray;
+            rootObj["users"] = usersArray;
+            statusFile.write(QJsonDocument(rootObj).toJson());
+            statusFile.close();
+            qInfo() << "Created initial status.json file";
+        } else {
+            qCritical() << "Failed to create status.json file:" << statusFile.errorString();
+        }
     }
 }
 
