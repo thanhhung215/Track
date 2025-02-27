@@ -119,6 +119,11 @@ server::~server()
 void server::setupHttpServer() {
     qInfo() << "Setting up HTTP server...";
     
+    // Add health check endpoint first
+    httpServer->route("/health", QHttpServerRequest::Method::Get, [] {
+        return QHttpServerResponse(QByteArray("OK"), "text/plain", QHttpServerResponse::StatusCode::Ok);
+    });
+    
     // Thêm error handler
     httpServer->afterRequest([](QHttpServerResponse &&resp) {
         qDebug() << "Request completed with status:" << resp.statusCode();
@@ -165,11 +170,6 @@ void server::setupHttpServer() {
         qInfo() << "Received video upload request";
         handleVideoUpload(request);
         return QHttpServerResponse::StatusCode::Ok;
-    });
-    
-    // Add health check endpoint
-    httpServer->route("/health", [] {
-        return QHttpServerResponse("OK", QHttpServerResponse::StatusCode::Ok);
     });
 
     qInfo() << "HTTP routes configured successfully";
