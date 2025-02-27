@@ -1289,9 +1289,9 @@ void server::createInitialJsonFiles() {
     }
 }
 
-void Server::show() {
-    serverWindow->show();
-    emit serverReady(); // Add explicit ready signal after window is shown
+void server::show() {
+    QMainWindow::show();  // Call base class show()
+    emit serverReady();
 }
 
 
