@@ -167,10 +167,9 @@ void server::setupHttpServer() {
         return QHttpServerResponse::StatusCode::Ok;
     });
     
-    // Add default route for testing
-    httpServer->route("/", [] {
-        qInfo() << "Received request to root endpoint";
-        return QHttpServerResponse("Server is running");
+    // Add health check endpoint
+    httpServer->route("/health", [this](const QHttpServerRequest &req) {
+        return QHttpServerResponse(200, "OK");
     });
 
     qInfo() << "HTTP routes configured successfully";
@@ -1288,6 +1287,11 @@ void server::createInitialJsonFiles() {
             qCritical() << "Failed to create status.json file:" << statusFile.errorString();
         }
     }
+}
+
+void Server::show() {
+    serverWindow->show();
+    emit serverReady(); // Add explicit ready signal after window is shown
 }
 
 
