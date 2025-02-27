@@ -119,24 +119,26 @@ server::~server()
 void server::setupHttpServer() {
     qInfo() << "Setting up HTTP server...";
     
-    // Add health check endpoint with explicit route handler and method
-    httpServer->route("/health", QHttpServerRequest::Method::Get, [](const QHttpServerRequest &request) {
-        qDebug() << "Health check endpoint called from:" << request.remoteAddress();
+    // Basic health check route with root path fallback
+    httpServer->route("/", [] {
+        return QHttpServerResponse(QString("Server is running").toUtf8(), "text/plain");
+    });
+    
+    httpServer->route("/health", [] {
         return QHttpServerResponse(QString("OK").toUtf8(), "text/plain");
     });
     
-    // Log all registered routes
-    qInfo() << "Registered routes:";
-    qInfo() << " - GET /health";
-    
-    // Add global request logger
-    httpServer->afterRequest([](QHttpServerResponse &&resp) {
-        qDebug() << "Request completed with status:" << resp.statusCode();
-        return std::move(resp);
+    // Add catch-all route for debugging
+    httpServer->route("*", [](const QHttpServerRequest &request) {
+        qDebug() << "Received request for:" << request.url().path()
+                 << "from:" << request.remoteAddress();
+        return QHttpServerResponse(QString("Path: %1").arg(request.url().path()).toUtf8(), 
+                                 "text/plain",
+                                 QHttpServerResponse::StatusCode::NotFound);
     });
     
-    // Start server on specific port
-    const auto port = httpServer->listen(QHostAddress::Any, 8080);
+    // Start server
+    const auto port = httpServer->listen(QHostAddress::AnyIPv4, 8080);
     if (!port) {
         qCritical() << "Failed to start HTTP server on port 8080";
         emit serverError("Failed to start HTTP server");
@@ -148,32 +150,36 @@ void server::setupHttpServer() {
     // Log all network interfaces
     const QList<QHostAddress> addresses = QNetworkInterface::allAddresses();
     for (const QHostAddress &address : addresses) {
-        if (address.protocol() == QAbstractSocket::IPv4Protocol 
-            && address != QHostAddress::LocalHost) {
+        if (address.protocol() == QAbstractSocket::IPv4Protocol) {
             qInfo() << "Server accessible at:" 
                    << QString("http://%1:%2").arg(address.toString()).arg(port);
         }
     }
     
-    // Test the health endpoint internally
-    QTimer::singleShot(0, this, [this]() {
-        qInfo() << "Testing health endpoint...";
+    // Test endpoints
+    QTimer::singleShot(1000, this, [this]() {
+        qInfo() << "Testing endpoints...";
         QNetworkAccessManager *manager = new QNetworkAccessManager(this);
-        QNetworkRequest request(QUrl("http://localhost:8080/health"));
         
-        connect(manager, &QNetworkAccessManager::finished, this, [](QNetworkReply *reply) {
-            if (reply->error() == QNetworkReply::NoError) {
-                qInfo() << "Health endpoint test successful:" << reply->readAll();
-            } else {
-                qWarning() << "Health endpoint test failed:" << reply->errorString();
-            }
-            reply->deleteLater();
-        });
-        
-        manager->get(request);
+        QStringList endpoints = {"/", "/health"};
+        for (const QString &endpoint : endpoints) {
+            QNetworkRequest request(QUrl(QString("http://localhost:8080%1").arg(endpoint)));
+            
+            connect(manager, &QNetworkAccessManager::finished, this, 
+                [endpoint](QNetworkReply *reply) {
+                    if (reply->error() == QNetworkReply::NoError) {
+                        qInfo() << "Endpoint" << endpoint << "test successful:" 
+                               << reply->readAll();
+                    } else {
+                        qWarning() << "Endpoint" << endpoint << "test failed:" 
+                                 << reply->errorString();
+                    }
+                    reply->deleteLater();
+                });
+            
+            manager->get(request);
+        }
     });
-    
-    qInfo() << "HTTP routes configured successfully";
 }
 
 void server::handleImageUpload(const QHttpServerRequest &request) {
