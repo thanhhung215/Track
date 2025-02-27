@@ -145,6 +145,19 @@ void server::setupHttpServer() {
         }
     }
     
+    // Add routes for image and video uploads
+    httpServer->route("/upload/image", QHttpServerRequest::Method::Post,
+                     [this](const QHttpServerRequest &request) {
+        handleImageUpload(request);
+        return QHttpServerResponse::StatusCode::Ok;
+    });
+    
+    httpServer->route("/upload/video", QHttpServerRequest::Method::Post,
+                     [this](const QHttpServerRequest &request) {
+        handleVideoUpload(request);
+        return QHttpServerResponse::StatusCode::Ok;
+    });
+    
     // Thêm route mặc định để test
     httpServer->route("/", [] {
         return QHttpServerResponse::StatusCode::Ok;
@@ -214,13 +227,6 @@ void server::handleImageUpload(const QHttpServerRequest &request) {
         qDebug() << "Failed to save image to" << imagePath;
     }
 }
-<<<<<<< HEAD
-=======
-
-void server::handleVideoUpload(const QHttpServerRequest &request) {
-    // Extract filename and username from rawData
-    QByteArray rawVideo = request.body(); // Get the base64 encoded data directly from the body
->>>>>>> 44f73d1eb667e0d1d7da8d587cf5d46f01bf3856
 
 void server::handleVideoUpload(const QHttpServerRequest &request) {
     QByteArray rawVideo = request.body();
