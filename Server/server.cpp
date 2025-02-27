@@ -130,21 +130,24 @@ void server::setupHttpServer() {
 
     const auto port = httpServer->listen(QHostAddress::Any, 1234);
     if (!port) {
-        qCritical() << "Failed to start HTTP server:" << httpServer->errorString();
+        qCritical() << "Failed to start HTTP server on port 1234";
+        emit serverError("Failed to start HTTP server");
         return;
     }
 
     // Log tất cả các network interfaces
     const QList<QHostAddress> addresses = QNetworkInterface::allAddresses();
     for (const QHostAddress &address : addresses) {
-        if (address.protocol() == QAbstractSocket::IPv4Protocol) {
-            qInfo() << "Server accessible at:" << QString("http://%1:%2").arg(address.toString()).arg(port);
+        if (address.protocol() == QAbstractSocket::IPv4Protocol 
+            && address != QHostAddress::LocalHost) {
+            qInfo() << "Server accessible at:" 
+                   << QString("http://%1:%2").arg(address.toString()).arg(port);
         }
     }
     
     // Thêm route mặc định để test
     httpServer->route("/", [] {
-        return "Server is running";
+        return QHttpServerResponse::StatusCode::Ok;
     });
 
     qInfo() << "HTTP server started successfully on port" << port;
