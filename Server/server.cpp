@@ -120,12 +120,30 @@ void server::setupHttpServer() {
         qDebug() << "HTTP server started on port 8080";
     }
 }
-// Hypothetical example: Manually parse headers from the request data
+
 void server::handleImageUpload(const QHttpServerRequest &request) {
-    QByteArray rawData = request.body(); // Get the base64 encoded data directly from the body
+    QByteArray rawData = request.body();
+    
+    // Create directories if they don't exist
+    QString baseDir = QCoreApplication::applicationDirPath();
+    QString avatarDir = baseDir + "/avatar";
+    QDir dir;
+    if (!dir.exists(avatarDir)) {
+        if (!dir.mkpath(avatarDir)) {
+            qCWarning(serverCategory) << "handleImageUpload: Couldn't create avatar directory:" << avatarDir;
+            return;
+        }
+    }
+    
     // Find the start and end positions of the base64 data in rawData
     int startIndex = rawData.indexOf("\r\n\r\n") + 4;
     int endIndex = rawData.indexOf("\r\n--", startIndex);
+    
+    if (startIndex <= 4 || endIndex <= startIndex) {
+        qCWarning(serverCategory) << "handleImageUpload: Invalid data format";
+        return;
+    }
+    
     QString base64Data = rawData.mid(startIndex, endIndex - startIndex);
 
     // Decode the base64 data into binary data
@@ -133,7 +151,8 @@ void server::handleImageUpload(const QHttpServerRequest &request) {
 
     // Find the start index of the filename in the header
     int filenameIndex = rawData.indexOf("filename=\"") + 10; // 10 is the length of "filename=\""
-    QString username; // Declare username to replace imageName
+    QString username = "default"; // Default username if extraction fails
+    
     if (filenameIndex > 10) { // Check if "filename=\"" was found
         int filenameEndIndex = rawData.indexOf("\"", filenameIndex);
         if (filenameEndIndex > filenameIndex) {
@@ -144,15 +163,16 @@ void server::handleImageUpload(const QHttpServerRequest &request) {
             int lastSlashIndex = filePath.lastIndexOf('/');
             if (lastSlashIndex != -1) {
                 username = filePath.mid(lastSlashIndex + 1); // Get the substring after the last slash
-                username.chop(4); // Remove the last 4 characters (".jpg")
+                if (username.endsWith(".jpg", Qt::CaseInsensitive)) {
+                    username.chop(4); // Remove the last 4 characters (".jpg")
+                }
                 qDebug() << "Username:" << username;
             }
         }
     }
 
     // Create a file to save the image
-    QString baseDir = QCoreApplication::applicationDirPath();
-    QString imagePath = baseDir + "/avatar/" + username + ".jpg"; // Path and filename to save the image
+    QString imagePath = avatarDir + "/" + username + ".jpg"; // Path and filename to save the image
     QFile file(imagePath);
     if (file.open(QIODevice::WriteOnly)) {
         file.write(imageData);
@@ -162,16 +182,35 @@ void server::handleImageUpload(const QHttpServerRequest &request) {
         qDebug() << "Failed to save image to" << imagePath;
     }
 }
-void server::handleVideoUpload(const QHttpServerRequest &request) {
-    // Extract filename and username from rawData
-    QByteArray rawVideo = request.body(); // Get the base64 encoded data directly from the body
 
+void server::handleVideoUpload(const QHttpServerRequest &request) {
+    QByteArray rawVideo = request.body();
+    
+    // Create directories if they don't exist
+    QString baseDir = QCoreApplication::applicationDirPath();
+    QString introDir = baseDir + "/intro";
+    QDir dir;
+    if (!dir.exists(introDir)) {
+        if (!dir.mkpath(introDir)) {
+            qCWarning(serverCategory) << "handleVideoUpload: Couldn't create intro directory:" << introDir;
+            return;
+        }
+    }
+    
     // Assuming the video data starts after the last occurrence of "\r\n\r\n"
     int startIndex = rawVideo.lastIndexOf("\r\n\r\n") + 4;
-    int endIndex = rawVideo.indexOf("\r\n--boundary", startIndex);
+    int endIndex = rawVideo.indexOf("\r\n--", startIndex);
+    
+    if (startIndex <= 4 || endIndex <= startIndex) {
+        qCWarning(serverCategory) << "handleVideoUpload: Invalid data format";
+        return;
+    }
+    
     QByteArray videoData = rawVideo.mid(startIndex, endIndex - startIndex);
+    
     int filenameIndex = rawVideo.indexOf("filename=\"") + 10; // 10 is the length of "filename=\""
-    QString username; // Declare username to replace imageName
+    QString username = "default"; // Default username if extraction fails
+    
     if (filenameIndex > 10) { // Check if "filename=\"" was found
         int filenameEndIndex = rawVideo.indexOf("\"", filenameIndex);
         if (filenameEndIndex > filenameIndex) {
@@ -182,14 +221,16 @@ void server::handleVideoUpload(const QHttpServerRequest &request) {
             int lastSlashIndex = filePath.lastIndexOf('/');
             if (lastSlashIndex != -1) {
                 username = filePath.mid(lastSlashIndex + 1); // Get the substring after the last slash
-                username.chop(4); // Remove the last 4 characters (".jpg")
+                if (username.endsWith(".mp4", Qt::CaseInsensitive)) {
+                    username.chop(4); // Remove the last 4 characters (".mp4")
+                }
                 qDebug() << "Username:" << username;
             }
         }
     }
-    // Create a file to save the image
-    QString baseDir = QCoreApplication::applicationDirPath();
-    QString videoPath = baseDir + "/intro/" + username + ".mp4"; // Path and filename to save the image
+    
+    // Create a file to save the video
+    QString videoPath = introDir + "/" + username + ".mp4"; // Path and filename to save the video
     QFile file(videoPath);
     if (file.open(QIODevice::WriteOnly)) {
         file.write(videoData);
@@ -199,6 +240,7 @@ void server::handleVideoUpload(const QHttpServerRequest &request) {
         qDebug() << "Failed to save video to" << videoPath;
     }
 }
+
 void server::onNewConnection()
 {
     while (tcpServer->hasPendingConnections()) {
