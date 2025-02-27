@@ -168,8 +168,8 @@ void server::setupHttpServer() {
     });
     
     // Add health check endpoint
-    httpServer->route("/health", [this](const QHttpServerRequest &req) {
-        return QHttpServerResponse(200, "OK");
+    httpServer->route("/health", [] {
+        return QHttpServerResponse("OK", QHttpServerResponse::StatusCode::Ok);
     });
 
     qInfo() << "HTTP routes configured successfully";
