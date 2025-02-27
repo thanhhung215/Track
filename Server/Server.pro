@@ -1,10 +1,9 @@
-QT       += core gui
-QT += core network
-QT += httpserver
-QT += gui
+QT += core gui network httpserver websockets
+
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 CONFIG += c++17
+CONFIG+=test
 
 # You can make your code fail to compile if it uses deprecated APIs.
 # In order to do so, uncomment the following line.
@@ -27,8 +26,4 @@ else: unix:!android: target.path = /opt/$${TARGET}/bin
 
 RESOURCES += \
     account.qrc \
-    account.qrc \
-    icon.qrc \
-    icon.qrc \
-    status.qrc \
-    status.qrc
+    icon.qrc

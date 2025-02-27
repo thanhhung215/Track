@@ -28,13 +28,13 @@
 #include <QHttpServer>
 #include <QHttpServerRequest>
 #include <QHttpServerResponse>
-#include <QFile>
 #include <QSaveFile>
 #include <QImageReader>
 #include <QRegularExpression>
 #include <QRegularExpressionMatch>
 
 Q_LOGGING_CATEGORY(serverCategory, "server")
+Q_LOGGING_CATEGORY(serverLog, "server.log")
 
 server::server(QWidget *parent)
     : QMainWindow(parent),
@@ -43,7 +43,28 @@ server::server(QWidget *parent)
     httpServer(new QHttpServer(this))
 {
     ui->setupUi(this);
+    
+    qInfo() << "Starting server initialization...";
+    qInfo() << "Application path:" << QCoreApplication::applicationDirPath();
+    
+    // Kiểm tra và tạo thư mục
+    QDir appDir(QCoreApplication::applicationDirPath());
+    QStringList requiredDirs = {"account", "status", "timesheet", "data"};
+    
+    for (const QString &dir : requiredDirs) {
+        if (!appDir.exists(dir)) {
+            if (!appDir.mkdir(dir)) {
+                qCritical() << "Failed to create directory:" << dir;
+            } else {
+                qInfo() << "Created directory:" << dir;
+            }
+        }
+    }
+    
+    // Khởi tạo HTTP server
     setupHttpServer();
+    
+    qInfo() << "Server initialization completed";
 
     connect(tcpServer, &QTcpServer::newConnection, this, &server::onNewConnection);
     if (!tcpServer->isListening()) { // Check if the server is already listening
@@ -99,26 +120,37 @@ server::~server()
 }
 
 void server::setupHttpServer() {
-    // Define a route for uploading images
-    httpServer->route("/avatar", QHttpServerRequest::Method::Post, [this](const QHttpServerRequest &request) {
-        handleImageUpload(request);
-        QHttpServerResponse response(QHttpServerResponse::StatusCode::Ok);
-        return response;
+    qInfo() << "Setting up HTTP server...";
+    
+    // Thêm error handler
+    httpServer->afterRequest([](QHttpServerResponse &&resp) {
+        qDebug() << "Request completed with status:" << resp.statusCode();
+        return std::move(resp);
     });
 
-    // Define a route for uploading videos
-    httpServer->route("/intro", QHttpServerRequest::Method::Post, [this](const QHttpServerRequest &request) {
-        handleVideoUpload(request);
-        QHttpServerResponse response(QHttpServerResponse::StatusCode::Ok);
-        return response;
-    });
-
-    // Start listening on port 8080
-    if (!httpServer->bind(QHostAddress::Any, 8080)) {
-        qDebug() << "Failed to start HTTP server";
-    } else {
-        qDebug() << "HTTP server started on port 8080";
+    const auto port = httpServer->listen(QHostAddress::Any, 1234);
+    if (!port) {
+        qCritical() << "Failed to start HTTP server on port 1234";
+        emit serverError("Failed to start HTTP server");
+        return;
     }
+
+    // Log tất cả các network interfaces
+    const QList<QHostAddress> addresses = QNetworkInterface::allAddresses();
+    for (const QHostAddress &address : addresses) {
+        if (address.protocol() == QAbstractSocket::IPv4Protocol 
+            && address != QHostAddress::LocalHost) {
+            qInfo() << "Server accessible at:" 
+                   << QString("http://%1:%2").arg(address.toString()).arg(port);
+        }
+    }
+    
+    // Thêm route mặc định để test
+    httpServer->route("/", [] {
+        return QHttpServerResponse::StatusCode::Ok;
+    });
+
+    qInfo() << "HTTP server started successfully on port" << port;
 }
 
 void server::handleImageUpload(const QHttpServerRequest &request) {
@@ -182,6 +214,13 @@ void server::handleImageUpload(const QHttpServerRequest &request) {
         qDebug() << "Failed to save image to" << imagePath;
     }
 }
+<<<<<<< HEAD
+=======
+
+void server::handleVideoUpload(const QHttpServerRequest &request) {
+    // Extract filename and username from rawData
+    QByteArray rawVideo = request.body(); // Get the base64 encoded data directly from the body
+>>>>>>> 44f73d1eb667e0d1d7da8d587cf5d46f01bf3856
 
 void server::handleVideoUpload(const QHttpServerRequest &request) {
     QByteArray rawVideo = request.body();
@@ -550,6 +589,7 @@ void server::saveJsonFile(const QJsonObject &data) {
     file.close();
     QMessageBox::information(this, "Infomation", "Saved successfull");
 }
+
 bool server::checkCredentials(const QString &username, const QString &password) {
     QJsonObject loadedData = loadJsonFile();
 
@@ -848,6 +888,7 @@ void server::on_btnSubmit_clicked()
 
     ui->tableTimesheet->setModel(pointsModel);
 }
+
 void server::saveInfoData(const QString &username, const QJsonObject &infoData, QTcpSocket* socket) {
     QJsonObject loadedData = loadJsonFile();
     QJsonArray usersArray = loadedData.value("users").toArray();

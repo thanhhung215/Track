@@ -1,10 +1,12 @@
-name: Qt CI
+name: Build Qt Application
 
 on:
   push:
-    branches: [ main, master, develop ]
+    branches: [ main ]
+    tags:
+      - 'v*'
   pull_request:
-    branches: [ main, master, develop ]
+    branches: [ main ]
 
 jobs:
   build:
@@ -12,60 +14,551 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Install Qt
       uses: jurplel/install-qt-action@v3
       with:
-        version: '6.8.0'
+        version: '6.5.3'
         host: 'windows'
         target: 'desktop'
-        arch: 'win64_msvc2022_64'
-        modules: 'qt5compat qtmultimedia  qthttpserver qtwebsockets'
-        
-    - name: Setup MSVC
+        arch: 'win64_msvc2019_64'
+        tools: 'tools_qtcreator'
+        modules: 'qtwebsockets qtwebchannel qtwebengine qtwebview qthttpserver qtmultimedia'
+        cache: true
+
+    - name: Set up MSVC
+      uses: microsoft/setup-msbuild@v1.1
+
+    - name: Setup Visual Studio Environment
       uses: ilammy/msvc-dev-cmd@v1
       with:
         arch: x64
-        
+
+    # Build Server
+    - name: Create Server Build Directory
+      run: |
+        if (Test-Path build) { Remove-Item build -Recurse -Force }
+        mkdir build
+      working-directory: Server
+
+    - name: Configure Server QMake
+      run: |
+        qmake ..\Server.pro -spec win32-msvc "CONFIG+=test"
+      working-directory: Server/build
+
     - name: Build Server
       run: |
-        cd Server
-        qmake
         nmake
+      working-directory: Server/build
+
+    - name: Deploy Server
+      run: |
+        if (Test-Path deploy) { Remove-Item deploy -Recurse -Force }
+        mkdir deploy
+        copy build\release\Server.exe deploy\
+        windeployqt deploy\Server.exe
+      working-directory: Server
+
+    # Test Server
+    - name: Test Server
+      run: |
+        # Create necessary directories and files
+        Write-Host "Setting up required directories and files..."
         
+        # Create base directories
+        $baseDir = "deploy"
+        $dirs = @(
+            "$baseDir\account",
+            "$baseDir\timesheet",
+            "$baseDir\data",
+            "$baseDir\status\$((Get-Date).ToString('yyyy-MM-dd'))"
+        )
+        
+        foreach ($dir in $dirs) {
+            New-Item -ItemType Directory -Force -Path $dir
+        }
+        
+        # Create initial JSON files
+        $files = @{
+            "$baseDir\account\account.json" = '{"users": []}'
+            "$baseDir\timesheet\timesheet.json" = '{"entries": []}'
+            "$baseDir\data\points.json" = '{"points": {}}'
+            "$baseDir\status\$((Get-Date).ToString('yyyy-MM-dd'))\status.json" = '{"status": []}'
+        }
+        
+        foreach ($file in $files.Keys) {
+            Set-Content -Path $file -Value $files[$file]
+        }
+        
+        Write-Host "Directory structure created:"
+        Get-ChildItem -Path "deploy" -Recurse
+        
+        # Start Server with output redirection
+        $serverProcess = Start-Process -FilePath "deploy\Server.exe" -WorkingDirectory "deploy" -PassThru -RedirectStandardOutput "server_output.log" -RedirectStandardError "server_error.log" -NoNewWindow
+        
+        Write-Host "Server process started with PID: $($serverProcess.Id)"
+        Write-Host "Waiting for server to initialize..."
+        
+        # Wait and check for server startup in logs
+        $maxWait = 30
+        $waited = 0
+        $serverStarted = $false
+        $serverIP = ""
+        while ($waited -lt $maxWait -and -not $serverStarted) {
+            # Check both output and server.log
+            $logContent = Get-Content "server_output.log" -ErrorAction SilentlyContinue
+            $serverLogContent = Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
+            
+            # Show current log content for debugging
+            Write-Host "Current server log content (${waited}s):"
+            if ($serverLogContent) { 
+                Write-Host $serverLogContent
+                
+                # Split log content into lines
+                $logLines = $serverLogContent -split ' '
+                foreach ($line in $logLines) {
+                    if ($line -match 'http://([0-9.]+):8080') {
+                        $serverIP = $matches[1]
+                        $serverStarted = $true
+                        Write-Host "Server startup detected in logs at IP: $serverIP"
+                        break
+                    }
+                }
+                
+                if (-not $serverStarted -and ($serverLogContent -match 'HTTP server is listening on port')) {
+                    # If we see the listening message but no IP, use the first available IP
+                    $networkIP = Get-NetIPAddress -AddressFamily IPv4 | 
+                        Where-Object { $_.IPAddress -like "172.*" -or $_.IPAddress -like "10.*" } | 
+                        Select-Object -First 1 -ExpandProperty IPAddress
+                    if ($networkIP) {
+                        $serverIP = $networkIP
+                        $serverStarted = $true
+                        Write-Host "Using network adapter IP: $serverIP"
+                        break
+                    }
+                }
+            }
+            
+            Start-Sleep -Seconds 1
+            $waited++
+        }
+        
+        if (-not $serverStarted) {
+            Write-Error "Server did not start properly within $maxWait seconds"
+            Write-Host "Process status:"
+            Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
+            Write-Host "Final server log content:"
+            Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
+            Write-Host "Network interfaces:"
+            ipconfig /all
+            Write-Host "Active TCP Listeners:"
+            netstat -ano | Select-String "LISTENING"
+            exit 1
+        }
+        
+        # Try to connect using the extracted IP
+        Write-Host "Testing connection to $serverIP`:8080"
+        try {
+            $response = Invoke-WebRequest -Uri "http://$serverIP`:8080" -TimeoutSec 5
+            if ($response.StatusCode -eq 200) {
+                Write-Host "Successfully connected to $serverIP`:8080"
+                Write-Host "Response: $($response.Content)"
+            } else {
+                Write-Error "Received unexpected status code: $($response.StatusCode)"
+                exit 1
+            }
+        }
+        catch {
+            Write-Error "Failed to connect to $serverIP`:8080: $_"
+            Write-Host "Network interfaces:"
+            ipconfig /all
+            Write-Host "Active TCP Listeners:"
+            netstat -ano | Select-String "LISTENING"
+            exit 1
+        }
+        
+        # Kill Server process
+        Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+      working-directory: Server
+
+    # Build Client
+    - name: Create Client Build Directory
+      run: |
+        if (Test-Path build) { Remove-Item build -Recurse -Force }
+        mkdir build
+      working-directory: Client
+
+    - name: Configure Client QMake
+      run: |
+        qmake ..\Client.pro -spec win32-msvc "CONFIG+=test"
+      working-directory: Client/build
+
     - name: Build Client
       run: |
-        cd Client
-        qmake
         nmake
-        
-    - name: Create Release Directory
-      run: mkdir release
-      
-    - name: Copy Executables
+      working-directory: Client/build
+
+    - name: Deploy Client
       run: |
-        copy Server\build\Desktop_Qt_6_8_0_MSVC2022_64bit-Debug\Server.exe release\
-        copy Client\build\Desktop_Qt_6_8_0_MSVC2022_64bit-Debug\Client.exe release\
+        if (Test-Path deploy) { Remove-Item deploy -Recurse -Force }
+        mkdir deploy
+        copy build\release\Client.exe deploy\
+        windeployqt deploy\Client.exe
+      working-directory: Client
+
+    # Test Client
+    - name: Test Client
+      run: |
+        # Create test directory structure
+        $testDir = "test_environment"
+        New-Item -ItemType Directory -Force -Path $testDir
         
-    - name: Upload Artifacts
+        # Verify Server deployment and dependencies
+        Write-Host "Verifying Server deployment..."
+        $serverFiles = @(
+            "..\Server\deploy\Server.exe",
+            "..\Server\deploy\Qt6Core.dll",
+            "..\Server\deploy\Qt6Network.dll",
+            "..\Server\deploy\Qt6WebSockets.dll"
+        )
+        
+        foreach ($file in $serverFiles) {
+            if (-not (Test-Path $file)) {
+                Write-Error "Missing Server file: $file"
+                exit 1
+            }
+        }
+        
+        # Create required server directories and files
+        Write-Host "Setting up Server environment..."
+        $serverDirs = @(
+            "..\Server\deploy\account",
+            "..\Server\deploy\timesheet",
+            "..\Server\deploy\data",
+            "..\Server\deploy\status\$((Get-Date).ToString('yyyy-MM-dd'))"
+        )
+        
+        foreach ($dir in $serverDirs) {
+            New-Item -ItemType Directory -Force -Path $dir
+            Write-Host "Created directory: $dir"
+        }
+        
+        # Initialize JSON files
+        $jsonFiles = @{
+            "..\Server\deploy\account\account.json" = '{"users": []}'
+            "..\Server\deploy\timesheet\timesheet.json" = '{"entries": []}'
+            "..\Server\deploy\data\points.json" = '{"points": {}}'
+            "..\Server\deploy\status\$((Get-Date).ToString('yyyy-MM-dd'))\status.json" = '{"status": []}'
+        }
+        
+        foreach ($file in $jsonFiles.Keys) {
+            Set-Content -Path $file -Value $jsonFiles[$file]
+            Write-Host "Created file: $file with content: $($jsonFiles[$file])"
+        }
+        
+        # Check network ports
+        Write-Host "Checking network ports..."
+        $usedPorts = netstat -ano | Select-String ":8080"
+        if ($usedPorts) {
+            Write-Host "Port 8080 is in use. Current processes:"
+            $usedPorts
+            Write-Host "Attempting to free port 8080..."
+            $usedPorts | ForEach-Object {
+                if ($_ -match ":8080.*LISTENING.*?(\d+)") {
+                    $pid = $matches[1]
+                    Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue
+                    Write-Host "Stopped process with PID: $pid"
+                }
+            }
+        }
+        
+        # Start Server with detailed logging
+        Write-Host "Starting Server..."
+        $env:QT_LOGGING_RULES="*.debug=true"
+        $serverProcess = Start-Process -FilePath "..\Server\deploy\Server.exe" `
+            -WorkingDirectory "..\Server\deploy" `
+            -PassThru `
+            -RedirectStandardOutput "server_output.log" `
+            -RedirectStandardError "server_error.log" `
+            -NoNewWindow
+        
+        Write-Host "Server started with PID: $($serverProcess.Id)"
+        
+        # Monitor server startup
+        $maxWait = 30
+        $waited = 0
+        $serverReady = $false
+        
+        while ($waited -lt $maxWait -and -not $serverReady) {
+            # Check process is still running
+            if (-not (Get-Process -Id $serverProcess.Id -ErrorAction SilentlyContinue)) {
+                Write-Error "Server process terminated unexpectedly"
+                Write-Host "Server Output:"
+                Get-Content "server_output.log"
+                Write-Host "Server Errors:"
+                Get-Content "server_error.log"
+                exit 1
+            }
+            
+            # Check server logs
+            $serverLog = Get-Content "server_output.log" -ErrorAction SilentlyContinue
+            $serverErrorLog = Get-Content "server_error.log" -ErrorAction SilentlyContinue
+            
+            if ($serverLog) {
+                Write-Host "Current server log:"
+                Write-Host $serverLog
+            }
+            
+            if ($serverErrorLog) {
+                Write-Host "Current server error log:"
+                Write-Host $serverErrorLog
+            }
+            
+            if ($serverLog | Select-String "Server accessible at") {
+                $serverReady = $true
+                Write-Host "Server initialized successfully"
+                break
+            }
+            
+            Start-Sleep -Seconds 1
+            $waited++
+            Write-Host "Waiting for server... ($waited/$maxWait)"
+        }
+        
+        if (-not $serverReady) {
+            Write-Error "Server failed to initialize within $maxWait seconds"
+            Write-Host "Final server status:"
+            Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
+            Write-Host "Network status:"
+            netstat -ano | Select-String "LISTENING"
+            exit 1
+        }
+
+        # Continue with Client testing...
+        # Verify Client deployment
+        if (-not (Test-Path "deploy\Client.exe")) {
+            Write-Error "Client.exe not found in expected location"
+            exit 1
+        }
+        
+        # Start Client with logging
+        Write-Host "Starting Client..."
+        $env:QT_LOGGING_RULES="*.debug=true"  # Enable Qt debug logging
+        $clientProcess = Start-Process -FilePath "deploy\Client.exe" `
+            -WorkingDirectory "deploy" `
+            -PassThru `
+            -RedirectStandardOutput "client_output.log" `
+            -RedirectStandardError "client_error.log" `
+            -NoNewWindow
+        
+        Write-Host "Client started with PID: $($clientProcess.Id)"
+        
+        # Wait for client to initialize
+        Start-Sleep -Seconds 5
+        
+        # Verify client is running
+        $clientRunning = Get-Process -Id $clientProcess.Id -ErrorAction SilentlyContinue
+        if (-not $clientRunning) {
+            Write-Error "Client process failed to start or terminated early"
+            Get-Content "client_output.log"
+            Get-Content "client_error.log"
+            exit 1
+        }
+        
+        # Test basic functionality
+        $testCases = @(
+            @{
+                "name" = "Registration"
+                "data" = @{
+                    "username" = "testuser"
+                    "password" = "testpass"
+                }
+                "expectedResponse" = "Registration successful"
+            },
+            @{
+                "name" = "Login"
+                "data" = @{
+                    "username" = "testuser"
+                    "password" = "testpass"
+                }
+                "expectedResponse" = "Login successful"
+            }
+        )
+        
+        Write-Host "Running functional tests..."
+        foreach ($test in $testCases) {
+            Write-Host "Testing: $($test.name)"
+            
+            # Thử kết nối đến server trước khi test
+            $maxRetries = 60  # Tăng thời gian chờ lên 60 giây
+            $retryCount = 0
+            $connected = $false
+            
+            while ($retryCount -lt $maxRetries -and -not $connected) {
+                try {
+                    # Thay đổi port từ 8080 thành 1234
+                    $response = Invoke-WebRequest -Uri "http://localhost:1234" -Method GET -TimeoutSec 1
+                    if ($response.StatusCode -eq 200) {
+                        $connected = $true
+                        Write-Host "Server is ready!"
+                    }
+                } catch {
+                    $retryCount++
+                    Write-Host "Waiting for server... ($retryCount/$maxRetries)"
+                    Start-Sleep -Seconds 1
+                }
+            }
+            
+            if (-not $connected) {
+                Write-Error "Server failed to initialize within $maxRetries seconds"
+                exit 1
+            }
+            
+            # Log test execution
+            Add-Content -Path "test_log.txt" -Value "Running test: $($test.name) at $(Get-Date)"
+        }
+        
+        # Monitor logs
+        Write-Host "Checking logs..."
+        
+        # Check Server logs
+        Write-Host "Server Output Log:"
+        Get-Content "server_output.log"
+        Write-Host "Server Error Log:"
+        Get-Content "server_error.log"
+        
+        # Check Client logs
+        Write-Host "Client Output Log:"
+        Get-Content "client_output.log"
+        Write-Host "Client Error Log:"
+        Get-Content "client_error.log"
+        
+        # Check for specific error patterns
+        $errorPatterns = @(
+            "error",
+            "exception",
+            "failed",
+            "crash"
+        )
+        
+        $foundErrors = $false
+        foreach ($pattern in $errorPatterns) {
+            $errors = Get-Content "client_output.log", "client_error.log" | 
+                     Select-String -Pattern $pattern -CaseSensitive:$false
+            if ($errors) {
+                Write-Error "Found error pattern '$pattern' in logs:"
+                $errors | ForEach-Object { Write-Host $_ }
+                $foundErrors = $true
+            }
+        }
+        
+        if ($foundErrors) {
+            exit 1
+        }
+        
+        # Cleanup
+        Write-Host "Cleaning up processes..."
+        Stop-Process -Id $clientProcess.Id -Force -ErrorAction SilentlyContinue
+        Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+        
+        # Final verification
+        $requiredFiles = @(
+            "deploy\Client.exe",
+            "deploy\Qt6Core.dll",
+            "deploy\Qt6Gui.dll",
+            "deploy\Qt6Multimedia.dll",
+            "client_output.log",
+            "server_output.log"
+        )
+        
+        foreach ($file in $requiredFiles) {
+            if (-not (Test-Path $file)) {
+                Write-Error "Missing required file: $file"
+                exit 1
+            }
+            
+            if ($file -match "log$") {
+                $content = Get-Content $file
+                if (-not $content) {
+                    Write-Error "Log file is empty: $file"
+                    exit 1
+                }
+            }
+        }
+        
+        Write-Host "All tests completed successfully"
+      working-directory: Client
+
+    # Create combined deployment directory
+    - name: Create Combined Deploy Directory
+      run: |
+        if (Test-Path deploy) { Remove-Item deploy -Recurse -Force }
+        mkdir deploy
+        mkdir deploy\Server
+        mkdir deploy\Client
+        Copy-Item Server\deploy\* deploy\Server\ -Recurse
+        Copy-Item Client\deploy\* deploy\Client\ -Recurse
+        
+        # Create README.txt
+        @"
+        Track Application
+        =================
+
+        Installation:
+        1. Extract all files
+        2. Run Server\Server.exe first
+        3. Run Client\Client.exe
+
+        System Requirements:
+        - Windows 10 or later
+        - At least 4GB RAM
+        - DirectX 11 or later
+        "@ | Out-File -FilePath deploy\README.txt -Encoding UTF8
+
+    # Upload combined artifact
+    - name: Upload Combined Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: qt-executables
-        path: release\
+        name: Track-Windows
+        path: deploy/
 
-    - name: Run Tests
-      run: |
-        cd Server/tests
-        qmake
-        nmake
-        ./tests
-        
-        cd ../../Client/tests
-        qmake
-        nmake
-        ./tests
+    # Create Release
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: deploy/**/*
+        name: Release ${{ github.ref_name }}
+        body: |
+          ## What's Changed
+          * Automated release from tag ${{ github.ref_name }}
+          
+          ## Installation
+          1. Download and extract the archive
+          2. Run Server\Server.exe first
+          3. Run Client\Client.exe
+          
+          ## System Requirements
+          * Windows 10 or later
+          * At least 4GB RAM
+          * DirectX 11 or later
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Deploy to Server
-      if: github.ref == 'refs/heads/main'
-      run: |
-        # Các lệnh triển khai của bạn 
+    # Notify on Discord
+    - name: Discord Notification
+      if: always()
+      uses: sarisia/actions-status-discord@v1
+      with:
+        webhook: ${{ secrets.DISCORD_WEBHOOK }}
+        status: ${{ job.status }}
+        title: "Build Result"
+        description: |
+          Branch: ${{ github.ref_name }}
+          Commit: ${{ github.sha }}
+          
+          Download artifacts from:
+          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        ack_no_webhook: true  # Suppress error when webhook is not configured
