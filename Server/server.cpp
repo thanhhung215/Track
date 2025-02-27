@@ -141,7 +141,7 @@ void server::setupHttpServer() {
     qInfo() << "Setting up HTTP server...";
     
     // Cấu hình port và address thông qua properties
-    httpServer->setProperty("port", 8080);
+    httpServer->setProperty("port", 1234);
     httpServer->setProperty("address", QHostAddress::Any);
     
     // Define routes...
@@ -162,13 +162,13 @@ void server::setupHttpServer() {
     // Định nghĩa route root
     httpServer->route("/", [](const QHttpServerRequest &) {
         qInfo() << "Received request to root route";
-        return QHttpServerResponse("HTTP server is listening on port 8080");
+        return QHttpServerResponse("HTTP server is listening on port 1234");
     });
     
     // Khởi động HTTP server
-    const auto port = httpServer->listen(QHostAddress::Any, 8080);
+    const auto port = httpServer->listen(QHostAddress::Any, 1234);
     if (!port) {
-        qCritical() << "Failed to start HTTP server on port 8080";
+        qCritical() << "Failed to start HTTP server on port 1234";
     } else {
         qInfo() << "HTTP server is listening on port" << port;
         

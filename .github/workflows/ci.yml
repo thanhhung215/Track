@@ -388,6 +388,31 @@ jobs:
         Write-Host "Running functional tests..."
         foreach ($test in $testCases) {
             Write-Host "Testing: $($test.name)"
+            
+            # Thử kết nối đến server trước khi test
+            $maxRetries = 60  # Tăng thời gian chờ lên 60 giây
+            $retryCount = 0
+            $connected = $false
+            
+            while ($retryCount -lt $maxRetries -and -not $connected) {
+                try {
+                    $response = Invoke-WebRequest -Uri "http://localhost:1234" -Method GET -TimeoutSec 1
+                    if ($response.StatusCode -eq 200) {
+                        $connected = $true
+                        Write-Host "Server is ready!"
+                    }
+                } catch {
+                    $retryCount++
+                    Write-Host "Waiting for server... ($retryCount/$maxRetries)"
+                    Start-Sleep -Seconds 1
+                }
+            }
+            
+            if (-not $connected) {
+                Write-Error "Server failed to initialize within $maxRetries seconds"
+                exit 1
+            }
+            
             # Log test execution
             Add-Content -Path "test_log.txt" -Value "Running test: $($test.name) at $(Get-Date)"
         }
