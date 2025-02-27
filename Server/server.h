@@ -18,7 +18,8 @@ class server : public QMainWindow
 public:
     server(QWidget *parent = nullptr);
     ~server();
-
+signals:
+    void serverError(const QString &error);
 private slots:
     void onNewConnection();
     void on_btnView_clicked();
@@ -46,6 +47,11 @@ private:
     QJsonArray handleUserStatusRequest();
     QString currentUsername;
     QHttpServer *httpServer;
+private slots:
+    void handleServerError(const QString &error) {
+        qCritical() << "Server error:" << error;
+        // Có thể thêm xử lý lỗi ở đây
+    }
 };
 
 #endif // SERVER_H

@@ -43,7 +43,28 @@ server::server(QWidget *parent)
     httpServer(new QHttpServer(this))
 {
     ui->setupUi(this);
+    
+    qInfo() << "Starting server initialization...";
+    qInfo() << "Application path:" << QCoreApplication::applicationDirPath();
+    
+    // Kiểm tra và tạo thư mục
+    QDir appDir(QCoreApplication::applicationDirPath());
+    QStringList requiredDirs = {"account", "status", "timesheet", "data"};
+    
+    for (const QString &dir : requiredDirs) {
+        if (!appDir.exists(dir)) {
+            if (!appDir.mkdir(dir)) {
+                qCritical() << "Failed to create directory:" << dir;
+            } else {
+                qInfo() << "Created directory:" << dir;
+            }
+        }
+    }
+    
+    // Khởi tạo HTTP server
     setupHttpServer();
+    
+    qInfo() << "Server initialization completed";
 
     connect(tcpServer, &QTcpServer::newConnection, this, &server::onNewConnection);
     if (!tcpServer->isListening()) { // Check if the server is already listening
@@ -99,87 +120,34 @@ server::~server()
 }
 
 void server::setupHttpServer() {
-    // Cấu hình logging
-    qSetMessagePattern("[%{time yyyy-MM-dd hh:mm:ss.zzz}] %{type} %{message}");
-    
-    // Redirect qDebug to file
-    QFile *logFile = new QFile("server.log");
-    logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append);
-    if (logFile->isOpen()) {
-        qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &context, const QString &msg) {
-            static QFile *logFile = nullptr;
-            if (!logFile) {
-                logFile = new QFile("server.log");
-                logFile->open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Append);
-            }
-            
-            QString txt;
-            switch (type) {
-                case QtDebugMsg:
-                    txt = QString("Debug: %1").arg(msg);
-                    break;
-                case QtWarningMsg:
-                    txt = QString("Warning: %1").arg(msg);
-                    break;
-                case QtCriticalMsg:
-                    txt = QString("Critical: %1").arg(msg);
-                    break;
-                case QtFatalMsg:
-                    txt = QString("Fatal: %1").arg(msg);
-                    break;
-                default:
-                    txt = QString("Info: %1").arg(msg);
-                    break;
-            }
-            
-            QTextStream ts(logFile);
-            ts << QDateTime::currentDateTime().toString("yyyy-MM-dd hh:mm:ss.zzz ") << txt << Qt::endl;
-            fprintf(stderr, "%s\n", txt.toLocal8Bit().constData());
-        });
-    }
-
     qInfo() << "Setting up HTTP server...";
     
-    // Cấu hình port và address thông qua properties
-    httpServer->setProperty("port", 1234);
-    httpServer->setProperty("address", QHostAddress::Any);
-    
-    // Define routes...
-    httpServer->route("/avatar", QHttpServerRequest::Method::Post, [this](const QHttpServerRequest &request) {
-        qInfo() << "Received avatar upload request";
-        handleImageUpload(request);
-        QHttpServerResponse response(QHttpServerResponse::StatusCode::Ok);
-        return response;
+    // Thêm error handler
+    httpServer->afterRequest([](QHttpServerResponse &&resp) {
+        qDebug() << "Request completed with status:" << resp.statusCode();
+        return std::move(resp);
     });
 
-    httpServer->route("/intro", QHttpServerRequest::Method::Post, [this](const QHttpServerRequest &request) {
-        qInfo() << "Received video upload request";
-        handleVideoUpload(request);
-        QHttpServerResponse response(QHttpServerResponse::StatusCode::Ok);
-        return response;
-    });
-
-    // Định nghĩa route root
-    httpServer->route("/", [](const QHttpServerRequest &) {
-        qInfo() << "Received request to root route";
-        return QHttpServerResponse("HTTP server is listening on port 1234");
-    });
-    
-    // Khởi động HTTP server
     const auto port = httpServer->listen(QHostAddress::Any, 1234);
     if (!port) {
-        qCritical() << "Failed to start HTTP server on port 1234";
-    } else {
-        qInfo() << "HTTP server is listening on port" << port;
-        
-        // Hiển thị thông tin hữu ích về các địa chỉ IP có thể truy cập
-        QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
-        for (const QHostAddress &address : ipAddressesList) {
-            if (address.protocol() == QAbstractSocket::IPv4Protocol && address != QHostAddress::LocalHost) {
-                qInfo() << "Server accessible at:" << "http://" + address.toString() + ":" + QString::number(port);
-            }
+        qCritical() << "Failed to start HTTP server:" << httpServer->errorString();
+        return;
+    }
+
+    // Log tất cả các network interfaces
+    const QList<QHostAddress> addresses = QNetworkInterface::allAddresses();
+    for (const QHostAddress &address : addresses) {
+        if (address.protocol() == QAbstractSocket::IPv4Protocol) {
+            qInfo() << "Server accessible at:" << QString("http://%1:%2").arg(address.toString()).arg(port);
         }
     }
+    
+    // Thêm route mặc định để test
+    httpServer->route("/", [] {
+        return "Server is running";
+    });
+
+    qInfo() << "HTTP server started successfully on port" << port;
 }
 
 void server::handleImageUpload(const QHttpServerRequest &request) {
