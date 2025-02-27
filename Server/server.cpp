@@ -39,79 +39,75 @@ Q_LOGGING_CATEGORY(serverLog, "server.log")
 server::server(QWidget *parent)
     : QMainWindow(parent),
     ui(new Ui::server),
-    tcpServer(new QTcpServer(this)),
-    httpServer(new QHttpServer(this))
+    tcpServer(nullptr),
+    httpServer(nullptr)
 {
-    ui->setupUi(this);
-    
-    qInfo() << "Starting server initialization...";
-    qInfo() << "Application path:" << QCoreApplication::applicationDirPath();
-    
-    // Kiểm tra và tạo thư mục
-    QDir appDir(QCoreApplication::applicationDirPath());
-    QStringList requiredDirs = {"account", "status", "timesheet", "data", "avatar", "intro", "points"};
-    
-    for (const QString &dir : requiredDirs) {
-        if (!appDir.exists(dir)) {
-            if (!appDir.mkpath(dir)) {
-                qCritical() << "Failed to create directory:" << dir;
-            } else {
-                qInfo() << "Created directory:" << dir;
-            }
-        }
-    }
-    
-    // Create initial JSON files if they don't exist
-    createInitialJsonFiles();
-    
-    // Khởi tạo HTTP server with a different port
-    setupHttpServer();
-    
-    // Initialize TCP server with a different port
-    connect(tcpServer, &QTcpServer::newConnection, this, &server::onNewConnection);
-    if (!tcpServer->isListening()) { // Check if the server is already listening
-        if (!tcpServer->listen(QHostAddress::Any, 1235)) { // Use port 1235 for TCP
-            qCritical() << "TCP Server could not start! Error:" << tcpServer->errorString();
-        } else {
-            qInfo() << "TCP Server started on port 1235!";
-
-            // Get the IP address of the server
-            QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
-            QHostAddress ipAddress;
-            for (const QHostAddress &address : ipAddressesList) {
-                if (address.protocol() == QAbstractSocket::IPv4Protocol && address != QHostAddress::LocalHost) {
-                    ipAddress = address;
-                    break;
+    try {
+        qInfo() << "Initializing server UI...";
+        ui->setupUi(this);
+        
+        qInfo() << "Creating TCP server...";
+        tcpServer = new QTcpServer(this);
+        
+        qInfo() << "Creating HTTP server...";
+        httpServer = new QHttpServer(this);
+        
+        qInfo() << "Setting up directories...";
+        QDir appDir(QCoreApplication::applicationDirPath());
+        QStringList requiredDirs = {"account", "status", "timesheet", "data", "avatar", "intro", "points"};
+        
+        for (const QString &dir : requiredDirs) {
+            if (!appDir.exists(dir)) {
+                qInfo() << "Creating directory:" << dir;
+                if (!appDir.mkpath(dir)) {
+                    QString error = QString("Failed to create directory: %1").arg(dir);
+                    qCritical() << error;
+                    emit serverError(error);
+                    return;
                 }
             }
-
-            if (ipAddress.isNull()) {
-                ipAddress = QHostAddress(QHostAddress::LocalHost);
-            }
-
-            QUrl url;
-            url.setScheme("http");
-            url.setHost(ipAddress.toString());
-            url.setPort(1235);
-            qInfo() << "Access the TCP server at:" << url.toString();
         }
-    } else {
-        qInfo() << "TCP Server is already listening!";
+        
+        qInfo() << "Creating initial JSON files...";
+        createInitialJsonFiles();
+        
+        qInfo() << "Setting up HTTP server...";
+        setupHttpServer();
+        
+        qInfo() << "Setting up TCP server...";
+        connect(tcpServer, &QTcpServer::newConnection, this, &server::onNewConnection);
+        if (!tcpServer->listen(QHostAddress::Any, 1235)) {
+            QString error = QString("TCP Server failed to start: %1").arg(tcpServer->errorString());
+            qCritical() << error;
+            emit serverError(error);
+            return;
+        }
+        
+        qInfo() << "Setting up timers...";
+        QTimer *clockTimer = new QTimer(this);
+        connect(clockTimer, &QTimer::timeout, this, &server::updateClock);
+        clockTimer->start(1000);
+        
+        QTimer *timesheetTimer = new QTimer(this);
+        connect(timesheetTimer, &QTimer::timeout, this, &server::showTimesheet);
+        timesheetTimer->start(1000);
+        
+        qInfo() << "Connecting UI signals...";
+        connect(ui->btnCreate, &QPushButton::clicked, this, &server::on_btnCreate_clicked);
+        connect(ui->btnDrop, &QPushButton::clicked, this, &server::on_btnDrop_clicked);
+        connect(ui->btnChange, &QPushButton::clicked, this, &server::on_btnChange_clicked);
+        
+        qInfo() << "Server initialization completed successfully";
+        
+    } catch (const std::exception& e) {
+        QString error = QString("Exception during server initialization: %1").arg(e.what());
+        qCritical() << error;
+        emit serverError(error);
+    } catch (...) {
+        QString error = "Unknown exception during server initialization";
+        qCritical() << error;
+        emit serverError(error);
     }
-
-    QTimer *clockTimer = new QTimer(this);
-    connect(clockTimer, &QTimer::timeout, this, &server::updateClock);
-    clockTimer->start(1000);
-
-    QTimer *timesheetTimer = new QTimer(this);
-    connect(timesheetTimer, &QTimer::timeout, this, &server::showTimesheet);
-    timesheetTimer->start(1000);
-
-    connect(ui->btnCreate, &QPushButton::clicked, this, &server::on_btnCreate_clicked);
-    connect(ui->btnDrop, &QPushButton::clicked, this, &server::on_btnDrop_clicked);
-    connect(ui->btnChange, &QPushButton::clicked, this, &server::on_btnChange_clicked);
-    
-    qInfo() << "Server initialization completed";
 }
 
 server::~server()
