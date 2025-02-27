@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 #include <QTcpServer>
+#include <QTcpSocket>
+#include <QJsonObject>
 #include <QJsonArray>
 #include <QHttpServer>
 #include <QObject>
@@ -40,6 +42,7 @@ private slots:
     void handleClientRegister(QTcpSocket* socket, const QJsonObject &obj);
     void saveJsonFile(const QJsonObject &data);
     void on_btnChange_clicked();
+    void createInitialJsonFiles();
 private:
     Ui::server *ui;
     QTcpServer *tcpServer;
