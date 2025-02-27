@@ -119,10 +119,15 @@ server::~server()
 void server::setupHttpServer() {
     qInfo() << "Setting up HTTP server...";
     
-    // Add health check endpoint first
-    httpServer->route("/health", QHttpServerRequest::Method::Get, [] {
-        return QHttpServerResponse(QByteArray("OK"), "text/plain", QHttpServerResponse::StatusCode::Ok);
+    // Add health check endpoint with explicit route handler
+    httpServer->route("/health", [] {
+        qDebug() << "Health check endpoint called";
+        return QHttpServerResponse(QString("OK").toUtf8(), "text/plain");
     });
+    
+    // Log all registered routes
+    qInfo() << "Registered routes:";
+    qInfo() << " - GET /health";
     
     // Thêm error handler
     httpServer->afterRequest([](QHttpServerResponse &&resp) {
@@ -146,6 +151,24 @@ void server::setupHttpServer() {
     } else {
         qInfo() << "HTTP server started successfully on port" << port;
     }
+
+    // Test the health endpoint internally
+    QTimer::singleShot(0, this, [this]() {
+        qInfo() << "Testing health endpoint...";
+        QNetworkAccessManager *manager = new QNetworkAccessManager(this);
+        QNetworkRequest request(QUrl("http://localhost:8080/health"));
+        
+        connect(manager, &QNetworkAccessManager::finished, this, [](QNetworkReply *reply) {
+            if (reply->error() == QNetworkReply::NoError) {
+                qInfo() << "Health endpoint test successful:" << reply->readAll();
+            } else {
+                qWarning() << "Health endpoint test failed:" << reply->errorString();
+            }
+            reply->deleteLater();
+        });
+        
+        manager->get(request);
+    });
 
     // Log all network interfaces
     const QList<QHostAddress> addresses = QNetworkInterface::allAddresses();
