@@ -39,78 +39,75 @@ Q_LOGGING_CATEGORY(serverLog, "server.log")
 server::server(QWidget *parent)
     : QMainWindow(parent),
     ui(new Ui::server),
-    tcpServer(new QTcpServer(this)),
-    httpServer(new QHttpServer(this))
+    tcpServer(nullptr),
+    httpServer(nullptr)
 {
-    ui->setupUi(this);
-    
-    qInfo() << "Starting server initialization...";
-    qInfo() << "Application path:" << QCoreApplication::applicationDirPath();
-    
-    // Kiểm tra và tạo thư mục
-    QDir appDir(QCoreApplication::applicationDirPath());
-    QStringList requiredDirs = {"account", "status", "timesheet", "data"};
-    
-    for (const QString &dir : requiredDirs) {
-        if (!appDir.exists(dir)) {
-            if (!appDir.mkdir(dir)) {
-                qCritical() << "Failed to create directory:" << dir;
-            } else {
-                qInfo() << "Created directory:" << dir;
-            }
-        }
-    }
-    
-    // Khởi tạo HTTP server
-    setupHttpServer();
-    
-    qInfo() << "Server initialization completed";
-
-    connect(tcpServer, &QTcpServer::newConnection, this, &server::onNewConnection);
-    if (!tcpServer->isListening()) { // Check if the server is already listening
-        if (!tcpServer->listen(QHostAddress::Any, 1234)) {
-            qDebug() << "Server could not start!";
-        } else {
-            qDebug() << "Server started!";
-
-            // Get the IP address of the server
-            QList<QHostAddress> ipAddressesList = QNetworkInterface::allAddresses();
-            QHostAddress ipAddress;
-            for (const QHostAddress &address : ipAddressesList) {
-                if (address.protocol() == QAbstractSocket::IPv4Protocol && address != QHostAddress::LocalHost) {
-                    ipAddress = address;
-                    break;
+    try {
+        qInfo() << "Initializing server UI...";
+        ui->setupUi(this);
+        
+        qInfo() << "Creating TCP server...";
+        tcpServer = new QTcpServer(this);
+        
+        qInfo() << "Creating HTTP server...";
+        httpServer = new QHttpServer(this);
+        
+        qInfo() << "Setting up directories...";
+        QDir appDir(QCoreApplication::applicationDirPath());
+        QStringList requiredDirs = {"account", "status", "timesheet", "data", "avatar", "intro", "points"};
+        
+        for (const QString &dir : requiredDirs) {
+            if (!appDir.exists(dir)) {
+                qInfo() << "Creating directory:" << dir;
+                if (!appDir.mkpath(dir)) {
+                    QString error = QString("Failed to create directory: %1").arg(dir);
+                    qCritical() << error;
+                    emit serverError(error);
+                    return;
                 }
             }
-
-            if (ipAddress.isNull()) {
-                ipAddress = QHostAddress(QHostAddress::LocalHost);
-            }
-
-            QUrl url;
-            url.setScheme("http");
-            url.setHost(ipAddress.toString());
-            url.setPort(1234);
-            qDebug() << "Access the server at:" << url.toString();
         }
-    } else {
-        qDebug() << "Server is already listening!";
+        
+        qInfo() << "Creating initial JSON files...";
+        createInitialJsonFiles();
+        
+        qInfo() << "Setting up HTTP server...";
+        setupHttpServer();
+        
+        qInfo() << "Setting up TCP server...";
+        connect(tcpServer, &QTcpServer::newConnection, this, &server::onNewConnection);
+        if (!tcpServer->listen(QHostAddress::Any, 1235)) {
+            QString error = QString("TCP Server failed to start: %1").arg(tcpServer->errorString());
+            qCritical() << error;
+            emit serverError(error);
+            return;
+        }
+        
+        qInfo() << "Setting up timers...";
+        QTimer *clockTimer = new QTimer(this);
+        connect(clockTimer, &QTimer::timeout, this, &server::updateClock);
+        clockTimer->start(1000);
+        
+        QTimer *timesheetTimer = new QTimer(this);
+        connect(timesheetTimer, &QTimer::timeout, this, &server::showTimesheet);
+        timesheetTimer->start(1000);
+        
+        qInfo() << "Connecting UI signals...";
+        connect(ui->btnCreate, &QPushButton::clicked, this, &server::on_btnCreate_clicked);
+        connect(ui->btnDrop, &QPushButton::clicked, this, &server::on_btnDrop_clicked);
+        connect(ui->btnChange, &QPushButton::clicked, this, &server::on_btnChange_clicked);
+        
+        qInfo() << "Server initialization completed successfully";
+        
+    } catch (const std::exception& e) {
+        QString error = QString("Exception during server initialization: %1").arg(e.what());
+        qCritical() << error;
+        emit serverError(error);
+    } catch (...) {
+        QString error = "Unknown exception during server initialization";
+        qCritical() << error;
+        emit serverError(error);
     }
-    // Add another timer to call on_btnView_clicked every 10 seconds
-
-
-    QTimer *clockTimer = new QTimer(this);
-    connect(clockTimer, &QTimer::timeout, this, &server::updateClock);
-    clockTimer->start(1000);
-
-    QTimer *timesheetTimer = new QTimer(this);
-    connect(timesheetTimer, &QTimer::timeout, this, &server::showTimesheet);
-    timesheetTimer->start(1000);
-
-    connect(ui->btnCreate, &QPushButton::clicked, this, &server::on_btnCreate_clicked);
-    connect(ui->btnDrop, &QPushButton::clicked, this, &server::on_btnDrop_clicked);
-    connect(ui->btnChange, &QPushButton::clicked, this, &server::on_btnChange_clicked);
-
 }
 
 server::~server()
@@ -122,42 +119,92 @@ server::~server()
 void server::setupHttpServer() {
     qInfo() << "Setting up HTTP server...";
     
-    // Thêm error handler
-    httpServer->afterRequest([](QHttpServerResponse &&resp) {
-        qDebug() << "Request completed with status:" << resp.statusCode();
-        return std::move(resp);
+    // Basic health check route with root path fallback
+    httpServer->route("/", [] {
+        return QHttpServerResponse(QString("Server is running").toUtf8(), "text/plain");
     });
-
-    const auto port = httpServer->listen(QHostAddress::Any, 1234);
+    
+    httpServer->route("/health", [] {
+        return QHttpServerResponse(QString("OK").toUtf8(), "text/plain");
+    });
+    
+    // Add catch-all route for debugging
+    httpServer->route("*", [](const QHttpServerRequest &request) {
+        qDebug() << "Received request for:" << request.url().path()
+                 << "from:" << request.remoteAddress();
+        return QHttpServerResponse(QString("Path: %1").arg(request.url().path()).toUtf8(), 
+                                 "text/plain",
+                                 QHttpServerResponse::StatusCode::NotFound);
+    });
+    
+    // Start server
+    const auto port = httpServer->listen(QHostAddress::AnyIPv4, 8080);
     if (!port) {
-        qCritical() << "Failed to start HTTP server on port 1234";
+        qCritical() << "Failed to start HTTP server on port 8080";
         emit serverError("Failed to start HTTP server");
         return;
     }
-
-    // Log tất cả các network interfaces
+    
+    qInfo() << "HTTP server started successfully on port" << port;
+    
+    // Log all network interfaces
     const QList<QHostAddress> addresses = QNetworkInterface::allAddresses();
     for (const QHostAddress &address : addresses) {
-        if (address.protocol() == QAbstractSocket::IPv4Protocol 
-            && address != QHostAddress::LocalHost) {
+        if (address.protocol() == QAbstractSocket::IPv4Protocol) {
             qInfo() << "Server accessible at:" 
                    << QString("http://%1:%2").arg(address.toString()).arg(port);
         }
     }
     
-    // Thêm route mặc định để test
-    httpServer->route("/", [] {
-        return QHttpServerResponse::StatusCode::Ok;
+    // Test endpoints
+    QTimer::singleShot(1000, this, [this]() {
+        qInfo() << "Testing endpoints...";
+        QNetworkAccessManager *manager = new QNetworkAccessManager(this);
+        
+        QStringList endpoints = {"/", "/health"};
+        for (const QString &endpoint : endpoints) {
+            QNetworkRequest request(QUrl(QString("http://localhost:8080%1").arg(endpoint)));
+            
+            connect(manager, &QNetworkAccessManager::finished, this, 
+                [endpoint](QNetworkReply *reply) {
+                    if (reply->error() == QNetworkReply::NoError) {
+                        qInfo() << "Endpoint" << endpoint << "test successful:" 
+                               << reply->readAll();
+                    } else {
+                        qWarning() << "Endpoint" << endpoint << "test failed:" 
+                                 << reply->errorString();
+                    }
+                    reply->deleteLater();
+                });
+            
+            manager->get(request);
+        }
     });
-
-    qInfo() << "HTTP server started successfully on port" << port;
 }
 
 void server::handleImageUpload(const QHttpServerRequest &request) {
-    QByteArray rawData = request.body(); // Get the base64 encoded data directly from the body
+    QByteArray rawData = request.body();
+    
+    // Create directories if they don't exist
+    QString baseDir = QCoreApplication::applicationDirPath();
+    QString avatarDir = baseDir + "/avatar";
+    QDir dir;
+    if (!dir.exists(avatarDir)) {
+        if (!dir.mkpath(avatarDir)) {
+            qCWarning(serverCategory) << "handleImageUpload: Couldn't create avatar directory:" << avatarDir;
+            return;
+        }
+    }
+    
     // Find the start and end positions of the base64 data in rawData
     int startIndex = rawData.indexOf("\r\n\r\n") + 4;
     int endIndex = rawData.indexOf("\r\n--", startIndex);
+    
+    if (startIndex <= 4 || endIndex <= startIndex) {
+        qCWarning(serverCategory) << "handleImageUpload: Invalid data format";
+        return;
+    }
+    
     QString base64Data = rawData.mid(startIndex, endIndex - startIndex);
 
     // Decode the base64 data into binary data
@@ -165,7 +212,8 @@ void server::handleImageUpload(const QHttpServerRequest &request) {
 
     // Find the start index of the filename in the header
     int filenameIndex = rawData.indexOf("filename=\"") + 10; // 10 is the length of "filename=\""
-    QString username; // Declare username to replace imageName
+    QString username = "default"; // Default username if extraction fails
+    
     if (filenameIndex > 10) { // Check if "filename=\"" was found
         int filenameEndIndex = rawData.indexOf("\"", filenameIndex);
         if (filenameEndIndex > filenameIndex) {
@@ -176,15 +224,16 @@ void server::handleImageUpload(const QHttpServerRequest &request) {
             int lastSlashIndex = filePath.lastIndexOf('/');
             if (lastSlashIndex != -1) {
                 username = filePath.mid(lastSlashIndex + 1); // Get the substring after the last slash
-                username.chop(4); // Remove the last 4 characters (".jpg")
+                if (username.endsWith(".jpg", Qt::CaseInsensitive)) {
+                    username.chop(4); // Remove the last 4 characters (".jpg")
+                }
                 qDebug() << "Username:" << username;
             }
         }
     }
 
     // Create a file to save the image
-    QString baseDir = QCoreApplication::applicationDirPath();
-    QString imagePath = baseDir + "/avatar/" + username + ".jpg"; // Path and filename to save the image
+    QString imagePath = avatarDir + "/" + username + ".jpg"; // Path and filename to save the image
     QFile file(imagePath);
     if (file.open(QIODevice::WriteOnly)) {
         file.write(imageData);
@@ -196,15 +245,33 @@ void server::handleImageUpload(const QHttpServerRequest &request) {
 }
 
 void server::handleVideoUpload(const QHttpServerRequest &request) {
-    // Extract filename and username from rawData
-    QByteArray rawVideo = request.body(); // Get the base64 encoded data directly from the body
-
+    QByteArray rawVideo = request.body();
+    
+    // Create directories if they don't exist
+    QString baseDir = QCoreApplication::applicationDirPath();
+    QString introDir = baseDir + "/intro";
+    QDir dir;
+    if (!dir.exists(introDir)) {
+        if (!dir.mkpath(introDir)) {
+            qCWarning(serverCategory) << "handleVideoUpload: Couldn't create intro directory:" << introDir;
+            return;
+        }
+    }
+    
     // Assuming the video data starts after the last occurrence of "\r\n\r\n"
     int startIndex = rawVideo.lastIndexOf("\r\n\r\n") + 4;
-    int endIndex = rawVideo.indexOf("\r\n--boundary", startIndex);
+    int endIndex = rawVideo.indexOf("\r\n--", startIndex);
+    
+    if (startIndex <= 4 || endIndex <= startIndex) {
+        qCWarning(serverCategory) << "handleVideoUpload: Invalid data format";
+        return;
+    }
+    
     QByteArray videoData = rawVideo.mid(startIndex, endIndex - startIndex);
+    
     int filenameIndex = rawVideo.indexOf("filename=\"") + 10; // 10 is the length of "filename=\""
-    QString username; // Declare username to replace imageName
+    QString username = "default"; // Default username if extraction fails
+    
     if (filenameIndex > 10) { // Check if "filename=\"" was found
         int filenameEndIndex = rawVideo.indexOf("\"", filenameIndex);
         if (filenameEndIndex > filenameIndex) {
@@ -215,14 +282,16 @@ void server::handleVideoUpload(const QHttpServerRequest &request) {
             int lastSlashIndex = filePath.lastIndexOf('/');
             if (lastSlashIndex != -1) {
                 username = filePath.mid(lastSlashIndex + 1); // Get the substring after the last slash
-                username.chop(4); // Remove the last 4 characters (".jpg")
+                if (username.endsWith(".mp4", Qt::CaseInsensitive)) {
+                    username.chop(4); // Remove the last 4 characters (".mp4")
+                }
                 qDebug() << "Username:" << username;
             }
         }
     }
-    // Create a file to save the image
-    QString baseDir = QCoreApplication::applicationDirPath();
-    QString videoPath = baseDir + "/intro/" + username + ".mp4"; // Path and filename to save the image
+    
+    // Create a file to save the video
+    QString videoPath = introDir + "/" + username + ".mp4"; // Path and filename to save the video
     QFile file(videoPath);
     if (file.open(QIODevice::WriteOnly)) {
         file.write(videoData);
@@ -1180,6 +1249,56 @@ void server::on_btnChange_clicked() {
         loadedData["users"] = usersArray;
         saveJsonFile(loadedData); // Assuming you have a function to save the JSON file
     }
+}
+
+void server::createInitialJsonFiles() {
+    QString baseDir = QCoreApplication::applicationDirPath();
+    
+    // Create account.json if it doesn't exist
+    QString accountPath = baseDir + "/account/account.json";
+    QFile accountFile(accountPath);
+    if (!accountFile.exists()) {
+        if (accountFile.open(QIODevice::WriteOnly)) {
+            QJsonObject rootObj;
+            QJsonArray usersArray;
+            rootObj["users"] = usersArray;
+            accountFile.write(QJsonDocument(rootObj).toJson());
+            accountFile.close();
+            qInfo() << "Created initial account.json file";
+        } else {
+            qCritical() << "Failed to create account.json file:" << accountFile.errorString();
+        }
+    }
+    
+    // Create initial status.json
+    QString date = QDateTime::currentDateTime().toString("yyyy-MM-dd");
+    QString statusDir = baseDir + "/status/" + date;
+    QDir dir;
+    if (!dir.exists(statusDir)) {
+        if (!dir.mkpath(statusDir)) {
+            qCritical() << "Failed to create status directory:" << statusDir;
+        }
+    }
+    
+    QString statusPath = statusDir + "/status.json";
+    QFile statusFile(statusPath);
+    if (!statusFile.exists()) {
+        if (statusFile.open(QIODevice::WriteOnly)) {
+            QJsonObject rootObj;
+            QJsonArray usersArray;
+            rootObj["users"] = usersArray;
+            statusFile.write(QJsonDocument(rootObj).toJson());
+            statusFile.close();
+            qInfo() << "Created initial status.json file";
+        } else {
+            qCritical() << "Failed to create status.json file:" << statusFile.errorString();
+        }
+    }
+}
+
+void server::show() {
+    QMainWindow::show();  // Call base class show()
+    emit serverReady();
 }
 
 

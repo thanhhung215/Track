@@ -3,6 +3,8 @@
 
 #include <QMainWindow>
 #include <QTcpServer>
+#include <QTcpSocket>
+#include <QJsonObject>
 #include <QJsonArray>
 #include <QHttpServer>
 #include <QObject>
@@ -16,10 +18,14 @@ class server : public QMainWindow
     Q_OBJECT
 
 public:
-    server(QWidget *parent = nullptr);
+    explicit server(QWidget *parent = nullptr);
     ~server();
+    void show();
+
 signals:
+    void serverReady();
     void serverError(const QString &error);
+
 private slots:
     void onNewConnection();
     void on_btnView_clicked();
@@ -40,6 +46,8 @@ private slots:
     void handleClientRegister(QTcpSocket* socket, const QJsonObject &obj);
     void saveJsonFile(const QJsonObject &data);
     void on_btnChange_clicked();
+    void createInitialJsonFiles();
+
 private:
     Ui::server *ui;
     QTcpServer *tcpServer;
@@ -47,6 +55,7 @@ private:
     QJsonArray handleUserStatusRequest();
     QString currentUsername;
     QHttpServer *httpServer;
+
 private slots:
     void handleServerError(const QString &error) {
         qCritical() << "Server error:" << error;
