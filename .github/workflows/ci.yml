@@ -397,20 +397,19 @@ jobs:
 
             while ($retryCount -lt $maxRetries -and -not $connected) {
                 try {
-                    # Kiểm tra log file trước
+                    # Kiểm tra log file
                     $serverLog = Get-Content "server_output.log" -ErrorAction SilentlyContinue
                     if ($serverLog | Select-String "HTTP server started successfully on port 8080") {
-                        $connected = $true
-                        Write-Host "Server is ready!"
-                        break
-                    }
-
-                    # Thử kết nối HTTP
-                    $response = Invoke-WebRequest -Uri "http://localhost:8080/" -Method GET -TimeoutSec 1
-                    if ($response.StatusCode -eq 200) {
-                        $connected = $true
-                        Write-Host "Server is ready!"
-                        break
+                        # Đợi thêm 2 giây để server hoàn tất khởi động
+                        Start-Sleep -Seconds 2
+                        
+                        # Kiểm tra kết nối HTTP
+                        $response = Invoke-WebRequest -Uri "http://localhost:8080/health" -Method GET -TimeoutSec 1
+                        if ($response.StatusCode -eq 200) {
+                            $connected = $true
+                            Write-Host "Server is ready!"
+                            break
+                        }
                     }
                 } catch {
                     $retryCount++
@@ -420,6 +419,8 @@ jobs:
             }
 
             if (-not $connected) {
+                Write-Host "Server log content:"
+                Get-Content "server_output.log"
                 Write-Error "Server failed to initialize within $maxRetries seconds"
                 exit 1
             }
