@@ -396,8 +396,8 @@ jobs:
             
             while ($retryCount -lt $maxRetries -and -not $connected) {
                 try {
-                    # Thay đổi port từ 8080 thành 1234
-                    $response = Invoke-WebRequest -Uri "http://localhost:1234" -Method GET -TimeoutSec 1
+                    # Kiểm tra server ở port 8080
+                    $response = Invoke-WebRequest -Uri "http://localhost:8080" -Method GET -TimeoutSec 1
                     if ($response.StatusCode -eq 200) {
                         $connected = $true
                         Write-Host "Server is ready!"
