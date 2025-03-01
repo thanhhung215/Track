@@ -391,17 +391,19 @@ jobs:
             
             # Kiểm tra server đã sẵn sàng chưa
             Write-Host "Waiting for server..."
-            $maxRetries = 60  # Tăng thời gian chờ lên 60 giây
+            $maxRetries = 120  # Tăng thời gian chờ lên 120 giây
             $retryCount = 0
             $connected = $false
 
             while ($retryCount -lt $maxRetries -and -not $connected) {
                 try {
-                    # Kiểm tra endpoint /health thay vì root
-                    $response = Invoke-WebRequest -Uri "http://localhost:8080/health" -Method GET -TimeoutSec 1
-                    if ($response.StatusCode -eq 200) {
+                    # Thử cả hai endpoints
+                    $healthResponse = Invoke-WebRequest -Uri "http://localhost:8080/health" -Method GET -TimeoutSec 1
+                    $rootResponse = Invoke-WebRequest -Uri "http://localhost:8080/" -Method GET -TimeoutSec 1
+                    
+                    if ($healthResponse.StatusCode -eq 200 -and $rootResponse.StatusCode -eq 200) {
                         $connected = $true
-                        Write-Host "Server is ready!"
+                        Write-Host "Server is ready! Both endpoints responding."
                         break
                     }
                 } catch {
@@ -418,6 +420,8 @@ jobs:
                 Get-Content "server_output.log"
                 Write-Host "Error logs:"
                 Get-Content "server_error.log"
+                Write-Host "Network status:"
+                netstat -ano | findstr "8080"
                 exit 1
             }
             
