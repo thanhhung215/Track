@@ -391,15 +391,22 @@ jobs:
             
             # Kiểm tra server đã sẵn sàng chưa
             Write-Host "Waiting for server..."
-            $maxRetries = 30  # Giảm thời gian chờ xuống 30 giây vì server thường khởi động trong vòng 5-10 giây
+            $maxRetries = 30
             $retryCount = 0
             $connected = $false
 
             while ($retryCount -lt $maxRetries -and -not $connected) {
                 try {
-                    # Thử endpoint chính
+                    # Kiểm tra log file trước
+                    $serverLog = Get-Content "server_output.log" -ErrorAction SilentlyContinue
+                    if ($serverLog | Select-String "HTTP server started successfully on port 8080") {
+                        $connected = $true
+                        Write-Host "Server is ready!"
+                        break
+                    }
+
+                    # Thử kết nối HTTP
                     $response = Invoke-WebRequest -Uri "http://localhost:8080/" -Method GET -TimeoutSec 1
-                    
                     if ($response.StatusCode -eq 200) {
                         $connected = $true
                         Write-Host "Server is ready!"
