@@ -91,19 +91,24 @@ jobs:
         
         # 2. Khởi động server
         Write-Host "Starting server..."
-        $serverProcess = Start-Process -FilePath "deploy\Server.exe" -WorkingDirectory "deploy" -PassThru -RedirectStandardOutput "server_output.log" -RedirectStandardError "server_error.log" -NoNewWindow
+        $serverProcess = Start-Process -FilePath "deploy\Server.exe" `
+            -WorkingDirectory "deploy" `
+            -PassThru `
+            -RedirectStandardOutput "..\server_output.log" `
+            -RedirectStandardError "..\server_error.log" `
+            -NoNewWindow
         
         Write-Host "Server process started with PID: $($serverProcess.Id)"
         
         # 3. Đợi và kiểm tra server khởi động
-        $maxWait = 60  # Tăng thời gian chờ lên 60 giây
+        $maxWait = 60
         $waited = 0
         $serverStarted = $false
         
         Write-Host "Waiting for server to initialize..."
         
         while ($waited -lt $maxWait -and -not $serverStarted) {
-            $serverLog = Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
+            $serverLog = Get-Content "..\server_output.log" -ErrorAction SilentlyContinue
             
             if ($serverLog) {
                 Write-Host "Server log at ${waited}s:"
