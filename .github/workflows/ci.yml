@@ -314,7 +314,7 @@ jobs:
                 Write-Host $serverErrorLog
             }
             
-            if ($serverLog | Select-String "Server accessible at") {
+            if ($serverLog | Select-String "HTTP server started successfully") {
                 $serverReady = $true
                 Write-Host "Server initialized successfully"
                 break
