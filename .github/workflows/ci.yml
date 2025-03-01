@@ -572,3 +572,30 @@ jobs:
           Download artifacts from:
           ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         ack_no_webhook: true  # Suppress error when webhook is not configured
+
+    - name: Start Server
+      run: |
+        cd Server/deploy
+        Start-Process -NoNewWindow ./server.exe
+        $attempts = 30
+        $success = $false
+        Write-Host "Waiting for server..."
+        
+        for ($i = 1; $i -le $attempts; $i++) {
+          try {
+            $response = Invoke-WebRequest -Uri "http://localhost:8080/health" -TimeoutSec 1
+            if ($response.StatusCode -eq 200) {
+              Write-Host "Server is up and running!"
+              $success = $true
+              break
+            }
+          } catch {
+            Write-Host "Attempt $i/$attempts - Server not ready yet..."
+          }
+          Start-Sleep -Seconds 1
+        }
+        
+        if (-not $success) {
+          Write-Error "Server failed to respond within $attempts seconds"
+          exit 1
+        }
