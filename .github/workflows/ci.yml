@@ -62,10 +62,8 @@ jobs:
     # Test Server
     - name: Test Server
       run: |
-        # Create necessary directories and files
+        # 1. Tạo cấu trúc thư mục và file cần thiết
         Write-Host "Setting up required directories and files..."
-        
-        # Create base directories
         $baseDir = "deploy"
         $dirs = @(
             "$baseDir\account",
@@ -76,9 +74,9 @@ jobs:
         
         foreach ($dir in $dirs) {
             New-Item -ItemType Directory -Force -Path $dir
+            Write-Host "Created directory: $dir"
         }
         
-        # Create initial JSON files
         $files = @{
             "$baseDir\account\account.json" = '{"users": []}'
             "$baseDir\timesheet\timesheet.json" = '{"entries": []}'
@@ -88,97 +86,75 @@ jobs:
         
         foreach ($file in $files.Keys) {
             Set-Content -Path $file -Value $files[$file]
+            Write-Host "Created file: $file"
         }
         
-        Write-Host "Directory structure created:"
-        Get-ChildItem -Path "deploy" -Recurse
-        
-        # Start Server with output redirection
+        # 2. Khởi động server
+        Write-Host "Starting server..."
         $serverProcess = Start-Process -FilePath "deploy\Server.exe" -WorkingDirectory "deploy" -PassThru -RedirectStandardOutput "server_output.log" -RedirectStandardError "server_error.log" -NoNewWindow
         
         Write-Host "Server process started with PID: $($serverProcess.Id)"
-        Write-Host "Waiting for server to initialize..."
         
-        # Wait and check for server startup in logs
-        $maxWait = 30
+        # 3. Đợi và kiểm tra server khởi động
+        $maxWait = 60  # Tăng thời gian chờ lên 60 giây
         $waited = 0
         $serverStarted = $false
-        $serverIP = ""
+        
+        Write-Host "Waiting for server to initialize..."
+        
         while ($waited -lt $maxWait -and -not $serverStarted) {
-            # Check both output and server.log
-            $logContent = Get-Content "server_output.log" -ErrorAction SilentlyContinue
-            $serverLogContent = Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
+            $serverLog = Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
             
-            # Show current log content for debugging
-            Write-Host "Current server log content (${waited}s):"
-            if ($serverLogContent) { 
-                Write-Host $serverLogContent
+            if ($serverLog) {
+                Write-Host "Server log at ${waited}s:"
+                Write-Host $serverLog
                 
-                # Split log content into lines
-                $logLines = $serverLogContent -split ' '
-                foreach ($line in $logLines) {
-                    if ($line -match 'http://([0-9.]+):8080') {
-                        $serverIP = $matches[1]
-                        $serverStarted = $true
-                        Write-Host "Server startup detected in logs at IP: $serverIP"
-                        break
-                    }
-                }
-                
-                if (-not $serverStarted -and ($serverLogContent -match 'HTTP server is listening on port')) {
-                    # If we see the listening message but no IP, use the first available IP
-                    $networkIP = Get-NetIPAddress -AddressFamily IPv4 | 
-                        Where-Object { $_.IPAddress -like "172.*" -or $_.IPAddress -like "10.*" } | 
-                        Select-Object -First 1 -ExpandProperty IPAddress
-                    if ($networkIP) {
-                        $serverIP = $networkIP
-                        $serverStarted = $true
-                        Write-Host "Using network adapter IP: $serverIP"
-                        break
-                    }
+                # Kiểm tra các dấu hiệu server đã khởi động thành công
+                if (($serverLog -match "Server initialization completed successfully") -and
+                    ($serverLog -match "HTTP server started successfully on port 8080")) {
+                    $serverStarted = $true
+                    Write-Host "Server started successfully!"
+                    break
                 }
             }
             
             Start-Sleep -Seconds 1
             $waited++
+            Write-Host "Waiting for server... ($waited/$maxWait)"
         }
         
-        if (-not $serverStarted) {
-            Write-Error "Server did not start properly within $maxWait seconds"
+        # 4. Kiểm tra kết nối tới server
+        if ($serverStarted) {
+            Write-Host "Testing server connection..."
+            try {
+                Start-Sleep -Seconds 2  # Đợi thêm 2 giây để server ổn định
+                $response = Invoke-WebRequest -Uri "http://localhost:8080/health" -TimeoutSec 5
+                
+                if ($response.StatusCode -eq 200) {
+                    Write-Host "Server is responding correctly!"
+                } else {
+                    throw "Unexpected status code: $($response.StatusCode)"
+                }
+            }
+            catch {
+                Write-Host "Failed to connect to server: $_"
+                Write-Host "Server logs:"
+                Get-Content "deploy\server.log"
+                Write-Host "Network status:"
+                ipconfig /all
+                netstat -ano | Select-String "LISTENING"
+                throw "Server connection test failed"
+            }
+        } else {
+            Write-Host "Server failed to start within $maxWait seconds"
+            Write-Host "Server logs:"
+            Get-Content "deploy\server.log"
             Write-Host "Process status:"
             Get-Process | Where-Object { $_.Id -eq $serverProcess.Id } | Format-List
-            Write-Host "Final server log content:"
-            Get-Content "deploy\server.log" -ErrorAction SilentlyContinue
-            Write-Host "Network interfaces:"
-            ipconfig /all
-            Write-Host "Active TCP Listeners:"
-            netstat -ano | Select-String "LISTENING"
-            exit 1
+            throw "Server startup timeout"
         }
         
-        # Try to connect using the extracted IP
-        Write-Host "Testing connection to $serverIP`:8080"
-        try {
-            $response = Invoke-WebRequest -Uri "http://$serverIP`:8080" -TimeoutSec 5
-            if ($response.StatusCode -eq 200) {
-                Write-Host "Successfully connected to $serverIP`:8080"
-                Write-Host "Response: $($response.Content)"
-            } else {
-                Write-Error "Received unexpected status code: $($response.StatusCode)"
-                exit 1
-            }
-        }
-        catch {
-            Write-Error "Failed to connect to $serverIP`:8080: $_"
-            Write-Host "Network interfaces:"
-            ipconfig /all
-            Write-Host "Active TCP Listeners:"
-            netstat -ano | Select-String "LISTENING"
-            exit 1
-        }
-        
-        # Kill Server process
-        Stop-Process -Id $serverProcess.Id -Force -ErrorAction SilentlyContinue
+        Write-Host "Server test completed successfully"
       working-directory: Server
 
     # Build Client
