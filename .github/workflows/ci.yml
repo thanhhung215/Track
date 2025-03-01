@@ -389,18 +389,20 @@ jobs:
         foreach ($test in $testCases) {
             Write-Host "Testing: $($test.name)"
             
-            # Thử kết nối đến server trước khi test
+            # Kiểm tra server đã sẵn sàng chưa
+            Write-Host "Waiting for server..."
             $maxRetries = 60  # Tăng thời gian chờ lên 60 giây
             $retryCount = 0
             $connected = $false
-            
+
             while ($retryCount -lt $maxRetries -and -not $connected) {
                 try {
-                    # Kiểm tra server ở port 8080
-                    $response = Invoke-WebRequest -Uri "http://localhost:8080" -Method GET -TimeoutSec 1
+                    # Kiểm tra endpoint /health thay vì root
+                    $response = Invoke-WebRequest -Uri "http://localhost:8080/health" -Method GET -TimeoutSec 1
                     if ($response.StatusCode -eq 200) {
                         $connected = $true
                         Write-Host "Server is ready!"
+                        break
                     }
                 } catch {
                     $retryCount++
@@ -408,9 +410,14 @@ jobs:
                     Start-Sleep -Seconds 1
                 }
             }
-            
+
             if (-not $connected) {
                 Write-Error "Server failed to initialize within $maxRetries seconds"
+                # Log thêm thông tin debug
+                Write-Host "Server logs:"
+                Get-Content "server_output.log"
+                Write-Host "Error logs:"
+                Get-Content "server_error.log"
                 exit 1
             }
             
