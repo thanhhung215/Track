@@ -114,9 +114,19 @@ jobs:
                 Write-Host "Server log at ${waited}s:"
                 Write-Host $serverLog
                 
-                # Kiểm tra các dấu hiệu server đã khởi động thành công
-                if (($serverLog -match "Server initialization completed successfully") -and
-                    ($serverLog -match "HTTP server started successfully on port 8080")) {
+                # Kiểm tra từng dòng log
+                foreach ($line in $serverLog) {
+                    if ($line -match "Server initialization completed successfully") {
+                        Write-Host "Found initialization success message"
+                        $initSuccess = $true
+                    }
+                    if ($line -match "HTTP server started successfully on port 8080") {
+                        Write-Host "Found HTTP server success message"
+                        $httpSuccess = $true
+                    }
+                }
+
+                if ($initSuccess -and $httpSuccess) {
                     $serverStarted = $true
                     Write-Host "Server started successfully!"
                     break
